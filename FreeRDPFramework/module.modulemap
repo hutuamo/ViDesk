@@ -1,0 +1,16 @@
+module FreeRDP [system] {
+    header "include/freerdp/freerdp.h"
+    header "include/freerdp/client/cmdline.h"
+    header "include/freerdp/gdi/gdi.h"
+    header "include/freerdp/channels/channels.h"
+    header "include/freerdp/input.h"
+    header "include/freerdp/settings.h"
+
+    link "freerdp3"
+    link "freerdp-client3"
+    link "winpr3"
+    link "ssl"
+    link "crypto"
+
+    export *
+}

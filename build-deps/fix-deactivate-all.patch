@@ -1,0 +1,30 @@
+--- a/libfreerdp/core/rdp.c
++++ b/libfreerdp/core/rdp.c
+@@ -31,6 +31,7 @@
+ #include "state.h"
+ #include "info.h"
+ #include "utils.h"
++#include "activation.h"
+ #include "mcs.h"
+ #include "redirection.h"
+ 
+@@ -1373,6 +1373,7 @@ state_run_t rdp_recv_out_of_sequence_pdu(rdpRdp* rdp, wStream* s, UINT16 pduType, UINT16 length)
+ {
+ 	state_run_t rc = STATE_RUN_FAILED;
+ 	WINPR_ASSERT(rdp);
+ 
+ 	switch (pduType)
+ 	{
+@@ -1386,6 +1387,12 @@ state_run_t rdp_recv_out_of_sequence_pdu(rdpRdp* rdp, wStream* s, UINT16 pduType, UINT16 length)
+ 		case PDU_TYPE_FLOW_TEST:
+ 			rc = STATE_RUN_SUCCESS;
+ 			break;
++		case PDU_TYPE_DEACTIVATE_ALL:
++			if (!rdp_recv_deactivate_all(rdp, s))
++			{
++				return STATE_RUN_FAILED;
++			}
++			return STATE_RUN_SUCCESS;
+ 		default:
+ 		{
+ 			char buffer1[256] = { 0 };

@@ -1,0 +1,50 @@
+# === 第三方源码 (通过 git clone 或下载获取) ===
+build-deps/FreeRDP/
+build-deps/openssl-*/
+build-deps/cJSON/
+
+# === 编译中间产物 ===
+build-deps/build-freerdp/
+build-deps/build-freerdp-device/
+build-deps/build-cjson-device/
+build-deps/output/
+
+# === 下载的压缩包 ===
+build-deps/*.tar.gz
+
+# === 静态库 (二进制文件，通过编译脚本生成) ===
+FreeRDPFramework/lib/*.a
+
+# === Xcode ===
+*.xcuserdata/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# === IDE ===
+.idea/
+*.swp
+*.swo
+*~
+
+# === Claude 本地配置 ===
+.claude/
+
+# === Cursor 调试日志 ===
+.cursor/debug.log
