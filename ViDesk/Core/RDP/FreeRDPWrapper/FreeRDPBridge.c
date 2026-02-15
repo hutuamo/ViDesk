@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <time.h>
 
 // FreeRDP 头文件
@@ -25,6 +26,33 @@
 #include <winpr/thread.h>
 
 #define TAG "viDesk"
+
+// === 日志系统 ===
+static FILE* g_logFile = NULL;
+
+void viDesk_setLogFile(const char* path) {
+    if (g_logFile) {
+        fclose(g_logFile);
+        g_logFile = NULL;
+    }
+    if (path) {
+        g_logFile = fopen(path, "a");
+    }
+}
+
+static void viDesk_log(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+
+    if (g_logFile) {
+        va_start(args, format);
+        vfprintf(g_logFile, format, args);
+        va_end(args);
+        fflush(g_logFile);
+    }
+}
 
 // 扩展上下文结构 - 继承 rdpClientContext
 typedef struct {
@@ -70,7 +98,7 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     if (!settings)
         return FALSE;
 
-    printf("[ViDesk] PreConnect 开始配置...\n");
+    viDesk_log("[ViDesk] PreConnect 开始配置...\n");
 
     // 配置 GDI
     if (!freerdp_settings_set_bool(settings, FreeRDP_SoftwareGdi, TRUE))
@@ -107,9 +135,9 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     BOOL nla = freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity);
     BOOL tls = freerdp_settings_get_bool(settings, FreeRDP_TlsSecurity);
     BOOL rdp = freerdp_settings_get_bool(settings, FreeRDP_RdpSecurity);
-    printf("[ViDesk] 安全协议: NLA=%d, TLS=%d, RDP=%d\n", nla, tls, rdp);
+    viDesk_log("[ViDesk] 安全协议: NLA=%d, TLS=%d, RDP=%d\n", nla, tls, rdp);
 
-    printf("[ViDesk] PreConnect 配置完成\n");
+    viDesk_log("[ViDesk] PreConnect 配置完成\n");
 
     return TRUE;
 }
@@ -204,16 +232,16 @@ static DWORD viDesk_VerifyCertificateEx(freerdp* instance, const char* host, UIN
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
-    printf("[ViDesk] 证书验证: CN=%s, Subject=%s, Issuer=%s\n",
+    viDesk_log("[ViDesk] 证书验证: CN=%s, Subject=%s, Issuer=%s\n",
            common_name ? common_name : "N/A",
            subject ? subject : "N/A",
            issuer ? issuer : "N/A");
-    printf("[ViDesk] 证书指纹: %s\n", fingerprint ? fingerprint : "N/A");
+    viDesk_log("[ViDesk] 证书指纹: %s\n", fingerprint ? fingerprint : "N/A");
 
     // 如果配置了忽略证书错误，自动接受
     rdpSettings* settings = instance->context->settings;
     if (settings && freerdp_settings_get_bool(settings, FreeRDP_IgnoreCertificate)) {
-        printf("[ViDesk] 自动接受证书 (IgnoreCertificate=TRUE)\n");
+        viDesk_log("[ViDesk] 自动接受证书 (IgnoreCertificate=TRUE)\n");
         return 1;  // 1 = 永久接受, 2 = 本次会话接受
     }
 
@@ -226,7 +254,7 @@ static DWORD viDesk_VerifyCertificateEx(freerdp* instance, const char* host, UIN
     }
 
     // 默认接受证书（开发阶段）
-    printf("[ViDesk] 默认接受证书\n");
+    viDesk_log("[ViDesk] 默认接受证书\n");
     return 1;
 }
 
@@ -242,10 +270,10 @@ static DWORD viDesk_VerifyChangedCertificateEx(freerdp* instance, const char* ho
     (void)old_issuer;
     (void)flags;
 
-    printf("[ViDesk] 证书已变更!\n");
-    printf("[ViDesk] 旧指纹: %s\n", old_fingerprint ? old_fingerprint : "N/A");
-    printf("[ViDesk] 新指纹: %s\n", new_fingerprint ? new_fingerprint : "N/A");
-    printf("[ViDesk] CN=%s, Subject=%s, Issuer=%s\n",
+    viDesk_log("[ViDesk] 证书已变更!\n");
+    viDesk_log("[ViDesk] 旧指纹: %s\n", old_fingerprint ? old_fingerprint : "N/A");
+    viDesk_log("[ViDesk] 新指纹: %s\n", new_fingerprint ? new_fingerprint : "N/A");
+    viDesk_log("[ViDesk] CN=%s, Subject=%s, Issuer=%s\n",
            common_name ? common_name : "N/A",
            subject ? subject : "N/A",
            issuer ? issuer : "N/A");
@@ -253,12 +281,12 @@ static DWORD viDesk_VerifyChangedCertificateEx(freerdp* instance, const char* ho
     // 如果配置了忽略证书错误，自动接受
     rdpSettings* settings = instance->context->settings;
     if (settings && freerdp_settings_get_bool(settings, FreeRDP_IgnoreCertificate)) {
-        printf("[ViDesk] 自动接受变更的证书 (IgnoreCertificate=TRUE)\n");
+        viDesk_log("[ViDesk] 自动接受变更的证书 (IgnoreCertificate=TRUE)\n");
         return 1;
     }
 
     // 默认接受变更的证书（开发阶段）
-    printf("[ViDesk] 默认接受变更的证书\n");
+    viDesk_log("[ViDesk] 默认接受变更的证书\n");
     return 1;
 }
 
@@ -267,9 +295,9 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
-    printf("[ViDesk] AuthenticateEx 回调被调用 (原因: %s)\n", reasonStr);
-    printf("[ViDesk] 用户名: %s\n", username && *username ? *username : "(空)");
-    printf("[ViDesk] 域: %s\n", domain && *domain ? *domain : "(空)");
+    viDesk_log("[ViDesk] AuthenticateEx 回调被调用 (原因: %s)\n", reason);
+    viDesk_log("[ViDesk] 用户名: %s\n", username && *username ? *username : "(空)");
+    viDesk_log("[ViDesk] 域: %s\n", domain && *domain ? *domain : "(空)");
 
     // 从 settings 中读取已设置的凭证
     rdpSettings* settings = instance->context->settings;
@@ -281,9 +309,9 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
         settingsUsername = freerdp_settings_get_string(settings, FreeRDP_Username);
         settingsPassword = freerdp_settings_get_string(settings, FreeRDP_Password);
         settingsDomain = freerdp_settings_get_string(settings, FreeRDP_Domain);        
-        printf("[ViDesk] Settings中的用户名: %s\n", settingsUsername ? settingsUsername : "(空)");
-        printf("[ViDesk] Settings中的密码长度: %d\n", settingsPassword ? (int)strlen(settingsPassword) : 0);
-        printf("[ViDesk] Settings中的域: %s\n", settingsDomain ? settingsDomain : "(空)");
+        viDesk_log("[ViDesk] Settings中的用户名: %s\n", settingsUsername ? settingsUsername : "(空)");
+        viDesk_log("[ViDesk] Settings中的密码长度: %d\n", settingsPassword ? (int)strlen(settingsPassword) : 0);
+        viDesk_log("[ViDesk] Settings中的域: %s\n", settingsDomain ? settingsDomain : "(空)");
     }
 
     // 调用 Swift 回调（如果设置了）
@@ -299,7 +327,7 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
                 free(*username);
             }
             *username = _strdup(settingsUsername);
-            printf("[ViDesk] 更新用户名指针: %s\n", *username);
+            viDesk_log("[ViDesk] 更新用户名指针: %s\n", *username);
         }
         
         if (settingsPassword && password) {
@@ -308,7 +336,7 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
                 free(*password);
             }
             *password = _strdup(settingsPassword);
-            printf("[ViDesk] 更新密码指针 (长度: %d)\n", (int)strlen(*password));
+            viDesk_log("[ViDesk] 更新密码指针 (长度: %d)\n", (int)strlen(*password));
         }
         
         if (settingsDomain && domain) {
@@ -318,12 +346,12 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
             }
             *domain = settingsDomain ? _strdup(settingsDomain) : NULL;
             if (*domain) {
-                printf("[ViDesk] 更新域指针: %s\n", *domain);
+                viDesk_log("[ViDesk] 更新域指针: %s\n", *domain);
             }
         }    }    
     // 验证凭证是否有效
     if (result && (!username || !*username || !password || !*password)) {
-        printf("[ViDesk] 警告: AuthenticateEx 回调返回 TRUE，但凭证为空\n");    }
+        viDesk_log("[ViDesk] 警告: AuthenticateEx 回调返回 TRUE，但凭证为空\n");    }
     
     return result;
 }
@@ -333,9 +361,9 @@ static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** passw
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
-    printf("[ViDesk] 认证回调被调用\n");
-    printf("[ViDesk] 用户名: %s\n", username && *username ? *username : "(空)");
-    printf("[ViDesk] 域: %s\n", domain && *domain ? *domain : "(空)");
+    viDesk_log("[ViDesk] 认证回调被调用\n");
+    viDesk_log("[ViDesk] 用户名: %s\n", username && *username ? *username : "(空)");
+    viDesk_log("[ViDesk] 域: %s\n", domain && *domain ? *domain : "(空)");
 
     // 从 settings 中读取已设置的凭证
     rdpSettings* settings = instance->context->settings;
@@ -380,7 +408,7 @@ static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** passw
         }    }    
     // 验证凭证是否有效
     if (result && (!username || !*username || !password || !*password)) {
-        printf("[ViDesk] 警告: 认证回调返回 TRUE，但凭证为空\n");    }
+        viDesk_log("[ViDesk] 警告: 认证回调返回 TRUE，但凭证为空\n");    }
     
     return result;
 }
@@ -495,10 +523,10 @@ bool viDesk_setCredentials(ViDeskContext* ctx, const char* username, const char*
     if (!settings)
         return false;
 
-    printf("[ViDesk] 设置凭证: 用户=%s, 域=%s\n",
+    viDesk_log("[ViDesk] 设置凭证: 用户=%s, 域=%s\n",
            username ? username : "(空)",
            domain ? domain : "(空)");
-    printf("[ViDesk] 密码信息: 指针=%p, 长度=%d\n",
+    viDesk_log("[ViDesk] 密码信息: 指针=%p, 长度=%d\n",
            password,
            password ? (int)strlen(password) : 0);
 
@@ -515,12 +543,12 @@ bool viDesk_setCredentials(ViDeskContext* ctx, const char* username, const char*
     // 但如果是 NULL，则不设置
     if (password != NULL) {
         passwordSet = freerdp_settings_set_string(settings, FreeRDP_Password, password);
-        printf("[ViDesk] 设置密码: 长度=%d, 内容=%s\n", 
+        viDesk_log("[ViDesk] 设置密码: 长度=%d, 内容=%s\n", 
                (int)strlen(password), 
                strlen(password) > 0 ? "***" : "(空)");
     } else {
         // 如果密码是 NULL，不设置（保持原有值）
-        printf("[ViDesk] 警告: 密码指针为 NULL，不设置密码\n");
+        viDesk_log("[ViDesk] 警告: 密码指针为 NULL，不设置密码\n");
     }
     
     // 设置域（即使为空也设置）
@@ -596,10 +624,16 @@ bool viDesk_setSecurity(ViDeskContext* ctx, bool useNLA, bool useTLS, bool ignor
     if (!settings)
         return false;
 
-    printf("[ViDesk] 设置安全选项: NLA=%s, TLS=%s, 忽略证书=%s\n",
+    viDesk_log("[ViDesk] 设置安全选项: NLA=%s, TLS=%s, 忽略证书=%s\n",
            useNLA ? "是" : "否",
            useTLS ? "是" : "否",
            ignoreCertErrors ? "是" : "否");
+
+    // NLA 要求 TLS 作为传输层，强制启用
+    if (useNLA && !useTLS) {
+        useTLS = true;
+        viDesk_log("[ViDesk] NLA 要求 TLS，已自动启用 TLS\n");
+    }
 
     // 设置安全协议
     freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, useNLA);
@@ -611,11 +645,11 @@ bool viDesk_setSecurity(ViDeskContext* ctx, bool useNLA, bool useTLS, bool ignor
     if (!useNLA && !useTLS) {
         // 只使用 RDP 安全
         freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, TRUE);
-        printf("[ViDesk] 仅启用 RDP 安全层\n");
+        viDesk_log("[ViDesk] 仅启用 RDP 安全层\n");
     } else {
         // 启用 RDP 安全作为后备选项
         freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, TRUE);
-        printf("[ViDesk] 启用 RDP 安全层作为后备\n");
+        viDesk_log("[ViDesk] 启用 RDP 安全层作为后备\n");
     }
 
     // 启用安全层协商
@@ -682,7 +716,7 @@ bool viDesk_connect(ViDeskContext* ctx) {
         const char* username = freerdp_settings_get_string(settings, FreeRDP_Username);
         const char* password = freerdp_settings_get_string(settings, FreeRDP_Password);
         const char* domain = freerdp_settings_get_string(settings, FreeRDP_Domain);
-        printf("[ViDesk] 正在连接: %s:%u (用户: %s)\n",
+        viDesk_log("[ViDesk] 正在连接: %s:%u (用户: %s)\n",
                hostname ? hostname : "N/A",
                port,
                username ? username : "N/A");    }
@@ -691,7 +725,7 @@ bool viDesk_connect(ViDeskContext* ctx) {
     notifyStateChange(ctx, 1, "Connecting...");  // 1 = connecting
 
     // 执行连接
-    printf("[ViDesk] 调用 freerdp_connect()...\n");
+    viDesk_log("[ViDesk] 调用 freerdp_connect()...\n");
     BOOL connectResult = freerdp_connect(instance);    if (!connectResult) {
         UINT32 error = freerdp_get_last_error(ctx->rdpCtx);
         const char* errorStr = freerdp_get_last_error_string(error);
@@ -704,36 +738,36 @@ bool viDesk_connect(ViDeskContext* ctx) {
                  errorName ? errorName : "UNKNOWN",
                  error);
 
-        printf("[ViDesk] 连接失败: %s\n", errorMsg);
-        printf("[ViDesk] 错误码: 0x%08X\n", error);
-        printf("[ViDesk] 错误名称: %s\n", errorName ? errorName : "UNKNOWN");
-        printf("[ViDesk] 错误类别: %s\n", errorCategory ? errorCategory : "UNKNOWN");
+        viDesk_log("[ViDesk] 连接失败: %s\n", errorMsg);
+        viDesk_log("[ViDesk] 错误码: 0x%08X\n", error);
+        viDesk_log("[ViDesk] 错误名称: %s\n", errorName ? errorName : "UNKNOWN");
+        viDesk_log("[ViDesk] 错误类别: %s\n", errorCategory ? errorCategory : "UNKNOWN");
         
         // 打印详细的认证相关错误信息
         if (error == 0x00020009 || errorName) {
             if (strstr(errorName ? errorName : "", "AUTHENTICATION") != NULL) {
-                printf("[ViDesk] ========== 认证失败详细信息 ==========\n");
+                viDesk_log("[ViDesk] ========== 认证失败详细信息 ==========\n");
                 rdpSettings* settings = ctx->rdpCtx->settings;
                 if (settings) {
                     const char* username = freerdp_settings_get_string(settings, FreeRDP_Username);
                     const char* password = freerdp_settings_get_string(settings, FreeRDP_Password);
                     const char* domain = freerdp_settings_get_string(settings, FreeRDP_Domain);
-                    printf("[ViDesk] Settings中的用户名: %s\n", username ? username : "(空)");
-                    printf("[ViDesk] Settings中的密码长度: %d\n", password ? (int)strlen(password) : 0);
-                    printf("[ViDesk] Settings中的域: %s\n", domain ? domain : "(空)");
+                    viDesk_log("[ViDesk] Settings中的用户名: %s\n", username ? username : "(空)");
+                    viDesk_log("[ViDesk] Settings中的密码长度: %d\n", password ? (int)strlen(password) : 0);
+                    viDesk_log("[ViDesk] Settings中的域: %s\n", domain ? domain : "(空)");
                     BOOL nla = freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity);
                     BOOL tls = freerdp_settings_get_bool(settings, FreeRDP_TlsSecurity);
                     BOOL rdp = freerdp_settings_get_bool(settings, FreeRDP_RdpSecurity);
-                    printf("[ViDesk] NLA: %s, TLS: %s, RDP: %s\n", nla ? "是" : "否", tls ? "是" : "否", rdp ? "是" : "否");
+                    viDesk_log("[ViDesk] NLA: %s, TLS: %s, RDP: %s\n", nla ? "是" : "否", tls ? "是" : "否", rdp ? "是" : "否");
                 }
-                printf("[ViDesk] =========================================\n");
+                viDesk_log("[ViDesk] =========================================\n");
             }
         }        setLastError(errorMsg);
         notifyStateChange(ctx, 5, errorMsg);  // 5 = error
         return false;
     }
 
-    printf("[ViDesk] 连接成功!\n");    return true;
+    viDesk_log("[ViDesk] 连接成功!\n");    return true;
 }
 
 void viDesk_disconnect(ViDeskContext* ctx) {

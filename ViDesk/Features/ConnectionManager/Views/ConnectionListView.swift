@@ -270,7 +270,8 @@ struct ConnectionListView: View {
     }
 
     private func connectTo(_ config: ConnectionConfig, password: String?) {
-        print("[ViDesk] connectTo 被调用 - 密码长度: \(password?.count ?? 0), 密码为空: \(password?.isEmpty ?? true)")
+        vLog("connectTo() - 主机: \(config.hostname):\(config.port), 用户: \(config.username), 密码长度: \(password?.count ?? 0)")
+        vLog("  NLA: \(config.useNLA), TLS: \(config.useTLS), 忽略证书: \(config.ignoreCertificateErrors)")
         viewModel.markAsConnected(config)
         onConnect?(config, password)
     }

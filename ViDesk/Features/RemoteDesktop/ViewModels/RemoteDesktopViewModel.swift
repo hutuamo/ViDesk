@@ -64,15 +64,19 @@ final class RemoteDesktopViewModel {
 
     /// 连接到远程桌面
     func connect(config: ConnectionConfig, password: String?) async {
+        vLog("ViewModel.connect() - \(config.hostname):\(config.port), 密码长度: \(password?.count ?? 0)")
         self.config = config
         self.password = password
         errorMessage = nil
 
         do {
             try await session.connect(config: config, password: password)
+            vLog("ViewModel.connect() 成功")
         } catch let error as RDPError {
+            vLog("ViewModel.connect() RDP错误: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         } catch {
+            vLog("ViewModel.connect() 错误: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -15,6 +15,7 @@
 		3E147E6FCB3942DC9872BF2D /* KeyboardMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7C496D12672D8AD78A47A2 /* KeyboardMapper.swift */; };
 		45B05FF7AC81BE5166A7C939 /* FrameBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC34DDD10F74F578985CA1F3 /* FrameBuffer.swift */; };
 		489850B8804CF194D288A77C /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B67E085D57CCF97E447295 /* SettingsViewModel.swift */; };
+		6005B1C2A6BFCE75804D46C1 /* FileLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4961C6769DC923CFC3D4CE90 /* FileLogger.swift */; };
 		687DBEF7B6BDEDC19D83D861 /* DisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D171E5CBA163AA642DE15B0 /* DisplaySettings.swift */; };
 		6BE6AFA9DBD97C299CD2BFAE /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E4C93BBCF64067ABC1E3E9 /* SessionState.swift */; };
 		6FA90EAFFBBED4232F60BE10 /* DesktopShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 92DE173B361F618FF452D0B5 /* DesktopShaders.metal */; };
@@ -51,6 +52,7 @@
 		398A6AAD17C1A282CB9C2E35 /* RDPSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RDPSession.swift; sourceTree = "<group>"; };
 		3A4D8FF11D0074C942DA1294 /* FreeRDPBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = FreeRDPBridge.h; sourceTree = "<group>"; };
 		4446D9E06A6D64102BF700E3 /* DebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugView.swift; sourceTree = "<group>"; };
+		4961C6769DC923CFC3D4CE90 /* FileLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileLogger.swift; sourceTree = "<group>"; };
 		516C3E98437CF31DBE1F73CA /* ConnectionStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStorageService.swift; sourceTree = "<group>"; };
 		51D2E8968BBEED2260052C52 /* DesktopCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopCanvasView.swift; sourceTree = "<group>"; };
 		5F7D4710968F2BD3C715ECCB /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -61,7 +63,7 @@
 		7A720AC364E05D947CA88584 /* GestureTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureTranslator.swift; sourceTree = "<group>"; };
 		80B2C971CDFE4CDE1667DF7F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8188C14B77C4187CCEE8F867 /* SessionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionToolbarView.swift; sourceTree = "<group>"; };
-		82AAF1EC8824B35ED23654BF /* ViDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		82AAF1EC8824B35ED23654BF /* ViDesk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ViDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		845700BC9FA548580204542B /* RemoteDesktopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDesktopView.swift; sourceTree = "<group>"; };
 		85E4C93BBCF64067ABC1E3E9 /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
 		8C6374854C82CD62424FB00E /* RemoteDesktopViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDesktopViewModel.swift; sourceTree = "<group>"; };
@@ -181,6 +183,7 @@
 			isa = PBXGroup;
 			children = (
 				516C3E98437CF31DBE1F73CA /* ConnectionStorageService.swift */,
+				4961C6769DC923CFC3D4CE90 /* FileLogger.swift */,
 				2CBA897F105E6581BE97982D /* KeychainService.swift */,
 			);
 			path = Services;
@@ -355,6 +358,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					484E15D9E30227BC4AFC114D = {
+						DevelopmentTeam = "";
+					};
+				};
 			};
 			buildConfigurationList = B9DF21A207A9A5FAD69230C7 /* Build configuration list for PBXProject "ViDesk" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -366,6 +374,7 @@
 			);
 			mainGroup = 94658DC4EBDB85791C70C621;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -405,6 +414,7 @@
 				EB0205F0EF0BAE9151432AAB /* DesktopCanvasView.swift in Sources */,
 				6FA90EAFFBBED4232F60BE10 /* DesktopShaders.metal in Sources */,
 				687DBEF7B6BDEDC19D83D861 /* DisplaySettings.swift in Sources */,
+				6005B1C2A6BFCE75804D46C1 /* FileLogger.swift in Sources */,
 				45B05FF7AC81BE5166A7C939 /* FrameBuffer.swift in Sources */,
 				772EF8DB5FEE978E1E71C004 /* FreeRDPBridge.c in Sources */,
 				C97C3EBCC24EDF977BF8567F /* FreeRDPContext.swift in Sources */,
@@ -434,15 +444,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = JD87F5U2LQ;
 				GCC_C_LANGUAGE_STANDARD = c11;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/include";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/FreeRDPFramework/include",
+				);
 				INFOPLIST_FILE = ViDesk/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/lib";
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/FreeRDPFramework/lib",
+				);
 				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ViDesk/Core/Rendering/Shaders";
 				OTHER_LDFLAGS = (
 					"-lfreerdp3",
@@ -453,7 +466,7 @@
 					"-lcrypto",
 					"-lz",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.xhl.videsk.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.videsk.app;
 				SDKROOT = xros;
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -528,15 +541,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = JD87F5U2LQ;
 				GCC_C_LANGUAGE_STANDARD = c11;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/include";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/FreeRDPFramework/include",
+				);
 				INFOPLIST_FILE = ViDesk/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/lib";
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/FreeRDPFramework/lib",
+				);
 				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ViDesk/Core/Rendering/Shaders";
 				OTHER_LDFLAGS = (
 					"-lfreerdp3",
@@ -547,7 +563,7 @@
 					"-lcrypto",
 					"-lz",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.xhl.videsk.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.videsk.app;
 				SDKROOT = xros;
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_COMPILATION_MODE = wholemodule;

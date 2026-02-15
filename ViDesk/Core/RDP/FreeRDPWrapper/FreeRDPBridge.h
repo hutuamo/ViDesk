@@ -132,6 +132,11 @@ void viDesk_getFrameSize(ViDeskContext* ctx, uint32_t* width, uint32_t* height);
 /// 获取帧缓冲区每像素字节数
 uint32_t viDesk_getFrameBytesPerPixel(ViDeskContext* ctx);
 
+// === 日志 ===
+
+/// 设置日志文件路径（同时输出到 stdout 和文件）
+void viDesk_setLogFile(const char* path);
+
 // === 调试和统计 ===
 
 /// 获取最后错误消息

@@ -7,6 +7,11 @@ import RealityKit
 /// ViDesk 应用入口
 @main
 struct ViDeskApp: App {
+    init() {
+        // 初始化文件日志
+        _ = FileLogger.shared
+    }
+
     var body: some SwiftUI.Scene {
         WindowGroup {
             ContentView()

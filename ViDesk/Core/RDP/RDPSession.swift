@@ -52,8 +52,12 @@ final class RDPSession {
             throw RDPError.connectionFailed("会话已在运行中")
         }
 
+        vLog("connect() 开始 - 主机: \(config.hostname):\(config.port), 用户: \(config.username)")
+        vLog("  密码长度: \(password?.count ?? 0), NLA: \(config.useNLA), TLS: \(config.useTLS)")
+        vLog("  显示: \(config.displaySettings.width)x\(config.displaySettings.height), 色深: \(config.displaySettings.colorDepth.rawValue)")
+
         self.config = config
-        self.savedPassword = password  // 保存密码用于重连
+        self.savedPassword = password
         self.reconnectAttempt = 0
 
         try await performConnect(password: password)
@@ -76,9 +80,8 @@ final class RDPSession {
             throw RDPError.connectionFailed("无连接配置")
         }
 
-        // 使用保存的密码重连
         disconnect()
-        print("[ViDesk] reconnect 使用保存的密码，长度: \(savedPassword?.count ?? 0)")
+        vLog("reconnect() 使用保存的密码，长度: \(savedPassword?.count ?? 0)")
         try await connect(config: config, password: savedPassword)
     }
 
@@ -175,60 +178,78 @@ final class RDPSession {
     }
 
     private func performConnect(password: String?) async throws {
+        vLog("performConnect() 开始 - 密码长度: \(password?.count ?? 0)")
         state = .connecting
 
+        vLog("  创建 FreeRDP 上下文...")
         guard context.create() else {
+            vLog("  [失败] 无法创建 RDP 上下文")
             state = .error(.connectionFailed("无法创建 RDP 上下文"))
             throw RDPError.connectionFailed("无法创建 RDP 上下文")
         }
+        vLog("  [成功] FreeRDP 上下文已创建")
 
         guard let config = config else {
+            vLog("  [失败] 无效的连接配置")
             state = .error(.connectionFailed("无效的连接配置"))
             throw RDPError.connectionFailed("无效的连接配置")
         }
 
-        // 配置连接
+        vLog("  设置服务器: \(config.hostname):\(config.port)")
         guard context.setServer(hostname: config.hostname, port: config.port) else {
+            vLog("  [失败] 无法设置服务器地址")
             throw RDPError.connectionFailed("无法设置服务器地址")
         }
 
         if !config.username.isEmpty {
             let finalPassword = password ?? ""
+            vLog("  设置凭证: 用户=\(config.username), 密码长度=\(finalPassword.count), 域=\(config.domain ?? "nil")")
             guard context.setCredentials(username: config.username,
                                          password: finalPassword,
                                          domain: config.domain) else {
+                vLog("  [失败] 无法设置凭证")
                 throw RDPError.connectionFailed("无法设置凭证")
             }
+        } else {
+            vLog("  跳过凭证设置 (用户名为空)")
         }
 
         let displaySettings = config.displaySettings
+        vLog("  设置显示: \(displaySettings.width)x\(displaySettings.height), 色深=\(displaySettings.colorDepth.rawValue)")
         guard context.setDisplay(width: displaySettings.width,
                                  height: displaySettings.height,
                                  colorDepth: displaySettings.colorDepth.rawValue) else {
+            vLog("  [失败] 无法设置显示参数")
             throw RDPError.connectionFailed("无法设置显示参数")
         }
 
+        vLog("  设置安全: NLA=\(config.useNLA), TLS=\(config.useTLS), 忽略证书=\(config.ignoreCertificateErrors)")
         guard context.setSecurity(useNLA: config.useNLA,
                                   useTLS: config.useTLS,
                                   ignoreCertErrors: config.ignoreCertificateErrors) else {
+            vLog("  [失败] 无法设置安全选项")
             throw RDPError.connectionFailed("无法设置安全选项")
         }
-        // 设置网关 (如果有)
+
         if let gateway = config.gatewayHostname, !gateway.isEmpty {
+            vLog("  设置网关: \(gateway)")
             _ = context.setGateway(hostname: gateway)
         }
 
-        // 执行连接
+        vLog("  开始执行连接...")
         state = .authenticating
         let connected = await context.connect()
         if connected {
+            vLog("  [成功] 连接已建立!")
             connectionStartTime = Date()
             initializeFrameBuffer()
+            vLog("  帧缓冲区: \(frameBuffer?.width ?? 0)x\(frameBuffer?.height ?? 0)")
             startEventLoop()
             startStatisticsTimer()
             state = .connected
         } else {
             let errorMessage = context.lastError ?? "未知错误"
+            vLog("  [失败] 连接失败: \(errorMessage)")
             state = .error(.connectionFailed(errorMessage))
             throw RDPError.connectionFailed(errorMessage)
         }
@@ -253,6 +274,7 @@ final class RDPSession {
     }
 
     private func handleConnectionStateChange(_ connectionState: FreeRDPContext.ConnectionState) {
+        vLog("状态变更: \(connectionState)")
         switch connectionState {
         case .disconnected:
             handleDisconnection()
@@ -267,26 +289,33 @@ final class RDPSession {
             state = .reconnecting(attempt: reconnectAttempt)
         case .error:
             let errorMessage = context.lastError ?? "未知错误"
+            vLog("状态变更 -> 错误: \(errorMessage)")
             state = .error(.connectionFailed(errorMessage))
         }
     }
 
     private func handleDisconnection() {
+        vLog("handleDisconnection() - autoReconnect: \(config?.autoReconnect ?? false), attempt: \(reconnectAttempt)/\(maxReconnectAttempts)")
         stopEventLoop()
         stopStatisticsTimer()
 
         guard let config = config, config.autoReconnect,
               reconnectAttempt < maxReconnectAttempts else {
+            vLog("  不再重连，设为 disconnected")
             state = .disconnected
             return
         }
 
-        // 自动重连
         Task {
             reconnectAttempt += 1
+            vLog("  自动重连 #\(reconnectAttempt), savedPassword长度: \(savedPassword?.count ?? 0)")
             state = .reconnecting(attempt: reconnectAttempt)
+
+            context.disconnect()
+            context.destroy()
+
             try? await Task.sleep(for: .seconds(reconnectDelay))
-            try? await performConnect(password: nil)
+            try? await performConnect(password: savedPassword)
         }
     }
 

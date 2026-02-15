@@ -155,9 +155,14 @@ final class ConnectionManagerViewModel {
     // MARK: - 连接操作
 
     /// 获取连接密码
-    func getPassword(for config: ConnectionConfig) -> String? {        do {
-            let password = try keychainService.getPassword(for: config.id)            return password
-        } catch {            return nil
+    func getPassword(for config: ConnectionConfig) -> String? {
+        do {
+            let password = try keychainService.getPassword(for: config.id)
+            vLog("getPassword() - config: \(config.hostname), 结果: \(password != nil ? "有密码(长度\(password!.count))" : "无密码")")
+            return password
+        } catch {
+            vLog("getPassword() - config: \(config.hostname), 错误: \(error)")
+            return nil
         }
     }
 
