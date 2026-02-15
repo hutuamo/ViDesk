@@ -124,11 +124,21 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
     freerdp_settings_set_bool(settings, FreeRDP_CompressionEnabled, TRUE);
 
-    // 网络自动检测
-    freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, TRUE);
+    // === xrdp 兼容性配置 ===
+    // 禁用网络自动检测 - xrdp 不支持，会导致 messageChannelId 错位
+    // 引发 "expected PDU_TYPE_DEMAND_ACTIVE, got PDU_TYPE_DEACTIVATE_ALL"
+    freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, FALSE);
+
+    // 禁用 GFX 图形管线 - xrdp 不支持 RDP 8.0+ 图形管线
+    freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_GfxThinClient, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_GfxSmallCache, FALSE);
+
+    // 禁用显示器布局 PDU - xrdp 不支持动态显示器变更
+    freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, FALSE);
 
     // === 协议兼容性配置 ===
-    // 支持错误信息 PDU（某些服务器需要）
     freerdp_settings_set_bool(settings, FreeRDP_SupportErrorInfoPdu, TRUE);
 
     // 打印当前安全设置
