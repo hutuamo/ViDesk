@@ -12,10 +12,13 @@ struct DebugView: View {
     @State private var testDomain = ""  // 域名（Linux 可留空或填主机名）
     @State private var connectionStatus = "未连接"
 
-    // 安全选项 - 服务器要求 NLA，所以默认启用
+    // 安全选项
     @State private var useNLA = true
     @State private var useTLS = true
     @State private var ignoreCertErrors = true
+
+    // 文件日志
+    @State private var fileLogContent = ""
 
     // RDP 会话
     @State private var rdpSession: RDPSession?
@@ -115,7 +118,45 @@ struct DebugView: View {
                 }
             }
 
-            Section("日志") {
+            Section("文件日志 (viDesk.log)") {
+                HStack {
+                    Button("刷新日志") {
+                        loadFileLog()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("复制全部") {
+                        UIPasteboard.general.string = fileLogContent
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(fileLogContent.isEmpty)
+
+                    Button("清空日志") {
+                        try? "".write(to: FileLogger.shared.logFileURL, atomically: true, encoding: .utf8)
+                        fileLogContent = ""
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if fileLogContent.isEmpty {
+                    Text("点击"刷新日志"查看")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ScrollView {
+                        Text(fileLogContent)
+                            .font(.caption2.monospaced())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 400)
+                }
+
+                Text("路径: \(FileLogger.shared.logFileURL.path)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("操作日志") {
                 if logMessages.isEmpty {
                     Text("暂无日志")
                         .foregroundStyle(.secondary)
@@ -399,6 +440,14 @@ struct DebugView: View {
             }
 
             connection.start(queue: .main)
+        }
+    }
+
+    private func loadFileLog() {
+        if let content = try? String(contentsOf: FileLogger.shared.logFileURL, encoding: .utf8) {
+            fileLogContent = content
+        } else {
+            fileLogContent = "(无日志文件)"
         }
     }
 
