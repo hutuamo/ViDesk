@@ -34,16 +34,20 @@ typedef struct {
 // 回调函数类型
 typedef void (*FrameUpdateCallback)(void* context, int x, int y, int width, int height);
 typedef void (*ConnectionStateCallback)(void* context, int state, const char* message);
+typedef void (*DesktopResizeCallback)(void* context, int width, int height);
 typedef bool (*AuthenticateCallback)(void* context, char** username, char** password, char** domain);
 typedef bool (*VerifyCertificateCallback)(void* context, const char* commonName, const char* subject,
                                           const char* issuer, const char* fingerprint, bool hostMismatch);
+typedef void (*ClipboardTextCallback)(void* context, const char* text);
 
 // 回调结构
 typedef struct {
     FrameUpdateCallback onFrameUpdate;
     ConnectionStateCallback onConnectionStateChanged;
+    DesktopResizeCallback onDesktopResize;
     AuthenticateCallback onAuthenticate;
     VerifyCertificateCallback onVerifyCertificate;
+    ClipboardTextCallback onRemoteClipboardChanged;
 } ViDeskCallbacks;
 
 // === 初始化和清理 ===

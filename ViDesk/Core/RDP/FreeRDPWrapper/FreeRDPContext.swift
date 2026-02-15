@@ -10,9 +10,11 @@ final class FreeRDPContext: @unchecked Sendable {
 
     // 回调闭包
     private var onFrameUpdate: ((CGRect) -> Void)?
+    private var onDesktopResize: ((CGSize) -> Void)?
     private var onStateChange: ((ConnectionState) -> Void)?
     private var onAuthenticationRequired: (() async -> Credentials?)?
     private var onCertificateVerify: ((CertificateInfo) async -> Bool)?
+    private var onRemoteClipboardChanged: ((String) -> Void)?
 
     /// 连接状态 (从 C 层映射)
     enum ConnectionState: Int {
@@ -83,6 +85,11 @@ final class FreeRDPContext: @unchecked Sendable {
         onFrameUpdate = handler
     }
 
+    /// 设置桌面分辨率变更回调
+    func setDesktopResizeHandler(_ handler: @escaping (CGSize) -> Void) {
+        onDesktopResize = handler
+    }
+
     /// 设置状态变化回调
     func setStateChangeHandler(_ handler: @escaping (ConnectionState) -> Void) {
         onStateChange = handler
@@ -96,6 +103,11 @@ final class FreeRDPContext: @unchecked Sendable {
     /// 设置证书验证回调
     func setCertificateVerifyHandler(_ handler: @escaping (CertificateInfo) async -> Bool) {
         onCertificateVerify = handler
+    }
+
+    /// 设置远程剪贴板变更回调
+    func setRemoteClipboardChangedHandler(_ handler: @escaping (String) -> Void) {
+        onRemoteClipboardChanged = handler
     }
 
     /// 暴露原始上下文指针，用于后台线程事件处理
@@ -300,6 +312,15 @@ final class FreeRDPContext: @unchecked Sendable {
             }
         }
 
+        callbacks.onDesktopResize = { (context, width, height) in
+            guard let context = context else { return }
+            let wrapper = Unmanaged<FreeRDPContext>.fromOpaque(context).takeUnretainedValue()
+            let size = CGSize(width: CGFloat(width), height: CGFloat(height))
+            Task { @MainActor in
+                wrapper.onDesktopResize?(size)
+            }
+        }
+
         callbacks.onConnectionStateChanged = { (context, state, message) in
             guard let context = context else { return }
             let wrapper = Unmanaged<FreeRDPContext>.fromOpaque(context).takeUnretainedValue()
@@ -326,6 +347,15 @@ final class FreeRDPContext: @unchecked Sendable {
             // 返回 TRUE 表示使用已经在 settings 中设置的凭证
             // FreeRDP 会在 settings 中查找凭证
             return true
+        }
+
+        callbacks.onRemoteClipboardChanged = { (context, text) in
+            guard let context = context, let text = text else { return }
+            let wrapper = Unmanaged<FreeRDPContext>.fromOpaque(context).takeUnretainedValue()
+            let clipboardText = String(cString: text)
+            Task { @MainActor in
+                wrapper.onRemoteClipboardChanged?(clipboardText)
+            }
         }
 
         viDesk_setCallbacks(ctx, callbacks, callbackContext)

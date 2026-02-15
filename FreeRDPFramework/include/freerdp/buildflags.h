@@ -1,7 +1,7 @@
 #ifndef FREERDP_BUILD_FLAGS_H
 #define FREERDP_BUILD_FLAGS_H
 
-#define FREERDP_CFLAGS "-target arm64-apple-xros2.0-simulator -fno-omit-frame-pointer -O3 -DNDEBUG"
+#define FREERDP_CFLAGS "-target arm64-apple-xros2.0 -fno-omit-frame-pointer -O3 -DNDEBUG"
 #define FREERDP_COMPILER_ID "AppleClang"
 #define FREERDP_COMPILER_VERSION "17.0.0.17000603"
 #define FREERDP_TARGET_ARCH ""

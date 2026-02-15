@@ -12,6 +12,7 @@
 
 // FreeRDP 头文件
 #include <freerdp/freerdp.h>
+#include <freerdp/client.h>
 #include <freerdp/client/cmdline.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/gdi/gfx.h>
@@ -20,10 +21,19 @@
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
 #include <freerdp/log.h>
+#include <freerdp/channels/rdpgfx.h>
+#include <freerdp/channels/cliprdr.h>
+#include <freerdp/client/cliprdr.h>
+#include <freerdp/channels/disp.h>
+#include <freerdp/channels/drdynvc.h>
+#include <freerdp/addin.h>
+#include <freerdp/event.h>
 
 #include <winpr/crt.h>
+#include <winpr/string.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
+#include <winpr/collections.h>
 
 #define TAG "viDesk"
 
@@ -60,6 +70,12 @@ typedef struct {
 
     // ViDesk 上下文指针
     ViDeskContext* viDeskCtx;
+
+    // cliprdr 剪贴板通道
+    CliprdrClientContext* cliprdr;
+    char* remoteClipboardText;      // 缓存的远程剪贴板文本
+    char* localClipboardText;       // 待发送到远程的本地文本
+    UINT32 cliprdrCapabilities;     // 服务器能力标志
 } ViDeskClientContext;
 
 // 全局回调
@@ -89,6 +105,394 @@ static void notifyFrameUpdate(ViDeskContext* ctx, int x, int y, int width, int h
     }
 }
 
+static void notifyDesktopResize(ViDeskContext* ctx, int width, int height) {
+    if (g_callbacks.onDesktopResize && ctx && ctx->swiftCallbackContext) {
+        g_callbacks.onDesktopResize(ctx->swiftCallbackContext, width, height);
+    }
+}
+
+static void notifyRemoteClipboardChanged(ViDeskContext* ctx, const char* text) {
+    if (g_callbacks.onRemoteClipboardChanged && ctx && ctx->swiftCallbackContext) {
+        g_callbacks.onRemoteClipboardChanged(ctx->swiftCallbackContext, text);
+    }
+}
+
+// === cliprdr 剪贴板通道回调 ===
+
+static UINT viDesk_cliprdr_send_client_capabilities(CliprdrClientContext* cliprdr) {
+    CLIPRDR_CAPABILITIES caps = {0};
+    CLIPRDR_GENERAL_CAPABILITY_SET generalCaps = {0};
+
+    caps.cCapabilitiesSets = 1;
+    caps.capabilitySets = (CLIPRDR_CAPABILITY_SET*)&generalCaps;
+
+    generalCaps.capabilitySetType = CB_CAPSTYPE_GENERAL;
+    generalCaps.capabilitySetLength = 12;
+    generalCaps.version = CB_CAPS_VERSION_2;
+    generalCaps.generalFlags = CB_USE_LONG_FORMAT_NAMES;
+
+    return cliprdr->ClientCapabilities(cliprdr, &caps);
+}
+
+static UINT viDesk_cliprdr_send_client_format_list(CliprdrClientContext* cliprdr) {
+    CLIPRDR_FORMAT formats[2] = {0};
+    CLIPRDR_FORMAT_LIST formatList = {0};
+
+    formats[0].formatId = CF_UNICODETEXT;
+    formats[0].formatName = NULL;
+    formats[1].formatId = CF_TEXT;
+    formats[1].formatName = NULL;
+
+    formatList.common.msgType = CB_FORMAT_LIST;
+    formatList.numFormats = 2;
+    formatList.formats = formats;
+
+    return cliprdr->ClientFormatList(cliprdr, &formatList);
+}
+
+static UINT viDesk_cliprdr_ServerCapabilities(CliprdrClientContext* cliprdr,
+                                               const CLIPRDR_CAPABILITIES* caps) {
+    if (!cliprdr || !caps)
+        return ERROR_INVALID_PARAMETER;
+
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)cliprdr->custom;
+    if (viCtx) {
+        for (UINT32 i = 0; i < caps->cCapabilitiesSets; i++) {
+            if (caps->capabilitySets[i].capabilitySetType == CB_CAPSTYPE_GENERAL) {
+                CLIPRDR_GENERAL_CAPABILITY_SET* generalCaps =
+                    (CLIPRDR_GENERAL_CAPABILITY_SET*)&caps->capabilitySets[i];
+                viCtx->cliprdrCapabilities = generalCaps->generalFlags;
+            }
+        }
+    }
+
+    viDesk_log("[ViDesk] cliprdr: 接收服务器能力\n");
+    return CHANNEL_RC_OK;
+}
+
+static UINT viDesk_cliprdr_MonitorReady(CliprdrClientContext* cliprdr,
+                                         const CLIPRDR_MONITOR_READY* monitorReady) {
+    if (!cliprdr || !monitorReady)
+        return ERROR_INVALID_PARAMETER;
+
+    viDesk_log("[ViDesk] cliprdr: MonitorReady - 发送客户端能力和格式列表\n");
+
+    UINT rc = viDesk_cliprdr_send_client_capabilities(cliprdr);
+    if (rc != CHANNEL_RC_OK)
+        return rc;
+
+    return viDesk_cliprdr_send_client_format_list(cliprdr);
+}
+
+static UINT viDesk_cliprdr_ServerFormatList(CliprdrClientContext* cliprdr,
+                                             const CLIPRDR_FORMAT_LIST* formatList) {
+    if (!cliprdr || !formatList)
+        return ERROR_INVALID_PARAMETER;
+
+    // 先应答格式列表
+    CLIPRDR_FORMAT_LIST_RESPONSE response = {0};
+    response.common.msgType = CB_FORMAT_LIST_RESPONSE;
+    response.common.msgFlags = CB_RESPONSE_OK;
+    cliprdr->ClientFormatListResponse(cliprdr, &response);
+
+    // 查找文本格式并请求数据
+    UINT32 requestFormat = 0;
+    for (UINT32 i = 0; i < formatList->numFormats; i++) {
+        if (formatList->formats[i].formatId == CF_UNICODETEXT) {
+            requestFormat = CF_UNICODETEXT;
+            break;
+        } else if (formatList->formats[i].formatId == CF_TEXT) {
+            requestFormat = CF_TEXT;
+        }
+    }
+
+    if (requestFormat != 0) {
+        viDesk_log("[ViDesk] cliprdr: 服务器有文本格式 %u，请求数据\n", requestFormat);
+        CLIPRDR_FORMAT_DATA_REQUEST request = {0};
+        request.common.msgType = CB_FORMAT_DATA_REQUEST;
+        request.requestedFormatId = requestFormat;
+        return cliprdr->ClientFormatDataRequest(cliprdr, &request);
+    }
+
+    return CHANNEL_RC_OK;
+}
+
+static UINT viDesk_cliprdr_ServerFormatListResponse(CliprdrClientContext* cliprdr,
+    const CLIPRDR_FORMAT_LIST_RESPONSE* response) {
+    (void)cliprdr;
+    (void)response;
+    return CHANNEL_RC_OK;
+}
+
+static UINT viDesk_cliprdr_ServerFormatDataRequest(CliprdrClientContext* cliprdr,
+    const CLIPRDR_FORMAT_DATA_REQUEST* request) {
+    if (!cliprdr || !request)
+        return ERROR_INVALID_PARAMETER;
+
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)cliprdr->custom;
+    CLIPRDR_FORMAT_DATA_RESPONSE response = {0};
+    response.common.msgType = CB_FORMAT_DATA_RESPONSE;
+
+    if (viCtx && viCtx->localClipboardText) {
+        UINT32 formatId = request->requestedFormatId;
+
+        if (formatId == CF_UNICODETEXT) {
+            size_t wcharSize = 0;
+            WCHAR* wstr = ConvertUtf8ToWCharAlloc(viCtx->localClipboardText, &wcharSize);
+            if (wstr && wcharSize > 0) {
+                response.common.msgFlags = CB_RESPONSE_OK;
+                response.common.dataLen = (UINT32)((wcharSize + 1) * sizeof(WCHAR));
+                response.requestedFormatData = (const BYTE*)wstr;
+                UINT rc = cliprdr->ClientFormatDataResponse(cliprdr, &response);
+                free(wstr);
+                return rc;
+            }
+            free(wstr);
+        } else if (formatId == CF_TEXT) {
+            size_t len = strlen(viCtx->localClipboardText) + 1;
+            response.common.msgFlags = CB_RESPONSE_OK;
+            response.common.dataLen = (UINT32)len;
+            response.requestedFormatData = (const BYTE*)viCtx->localClipboardText;
+            return cliprdr->ClientFormatDataResponse(cliprdr, &response);
+        }
+    }
+
+    // 无数据或格式不支持
+    response.common.msgFlags = CB_RESPONSE_FAIL;
+    response.common.dataLen = 0;
+    response.requestedFormatData = NULL;
+    return cliprdr->ClientFormatDataResponse(cliprdr, &response);
+}
+
+static UINT viDesk_cliprdr_ServerFormatDataResponse(CliprdrClientContext* cliprdr,
+    const CLIPRDR_FORMAT_DATA_RESPONSE* response) {
+    if (!cliprdr || !response)
+        return ERROR_INVALID_PARAMETER;
+
+    if (response->common.msgFlags & CB_RESPONSE_FAIL) {
+        viDesk_log("[ViDesk] cliprdr: 服务器拒绝提供数据\n");
+        return CHANNEL_RC_OK;
+    }
+
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)cliprdr->custom;
+    if (!viCtx)
+        return CHANNEL_RC_OK;
+
+    const BYTE* data = response->requestedFormatData;
+    UINT32 dataLen = response->common.dataLen;
+
+    if (!data || dataLen == 0)
+        return CHANNEL_RC_OK;
+
+    // 释放旧数据
+    free(viCtx->remoteClipboardText);
+    viCtx->remoteClipboardText = NULL;
+
+    // 检测请求的格式
+    UINT32 formatId = cliprdr->lastRequestedFormatId;
+
+    if (formatId == CF_UNICODETEXT) {
+        size_t utf8Size = 0;
+        viCtx->remoteClipboardText = ConvertWCharToUtf8Alloc(
+            (const WCHAR*)data, &utf8Size);
+    } else {
+        // CF_TEXT - 直接复制
+        viCtx->remoteClipboardText = (char*)calloc(1, dataLen + 1);
+        if (viCtx->remoteClipboardText) {
+            memcpy(viCtx->remoteClipboardText, data, dataLen);
+        }
+    }
+
+    if (viCtx->remoteClipboardText && viCtx->viDeskCtx) {
+        viDesk_log("[ViDesk] cliprdr: 收到远程剪贴板文本 (%zu 字节)\n",
+            strlen(viCtx->remoteClipboardText));
+        notifyRemoteClipboardChanged(viCtx->viDeskCtx, viCtx->remoteClipboardText);
+    }
+
+    return CHANNEL_RC_OK;
+}
+
+static UINT viDesk_cliprdr_ServerLockClipboardData(CliprdrClientContext* cliprdr,
+    const CLIPRDR_LOCK_CLIPBOARD_DATA* lock) {
+    (void)cliprdr;
+    (void)lock;
+    return CHANNEL_RC_OK;
+}
+
+static UINT viDesk_cliprdr_ServerUnlockClipboardData(CliprdrClientContext* cliprdr,
+    const CLIPRDR_UNLOCK_CLIPBOARD_DATA* unlock) {
+    (void)cliprdr;
+    (void)unlock;
+    return CHANNEL_RC_OK;
+}
+
+static BOOL viDesk_cliprdr_init(ViDeskClientContext* viCtx, CliprdrClientContext* cliprdr) {
+    if (!viCtx || !cliprdr)
+        return FALSE;
+
+    viCtx->cliprdr = cliprdr;
+    cliprdr->custom = (void*)viCtx;
+
+    cliprdr->ServerCapabilities = viDesk_cliprdr_ServerCapabilities;
+    cliprdr->MonitorReady = viDesk_cliprdr_MonitorReady;
+    cliprdr->ServerFormatList = viDesk_cliprdr_ServerFormatList;
+    cliprdr->ServerFormatListResponse = viDesk_cliprdr_ServerFormatListResponse;
+    cliprdr->ServerFormatDataRequest = viDesk_cliprdr_ServerFormatDataRequest;
+    cliprdr->ServerFormatDataResponse = viDesk_cliprdr_ServerFormatDataResponse;
+    cliprdr->ServerLockClipboardData = viDesk_cliprdr_ServerLockClipboardData;
+    cliprdr->ServerUnlockClipboardData = viDesk_cliprdr_ServerUnlockClipboardData;
+
+    viDesk_log("[ViDesk] cliprdr: 初始化完成\n");
+    return TRUE;
+}
+
+static BOOL viDesk_cliprdr_uninit(ViDeskClientContext* viCtx, CliprdrClientContext* cliprdr) {
+    if (!viCtx)
+        return FALSE;
+
+    free(viCtx->remoteClipboardText);
+    viCtx->remoteClipboardText = NULL;
+    free(viCtx->localClipboardText);
+    viCtx->localClipboardText = NULL;
+
+    if (cliprdr)
+        cliprdr->custom = NULL;
+
+    viCtx->cliprdr = NULL;
+
+    viDesk_log("[ViDesk] cliprdr: 清理完成\n");
+    return TRUE;
+}
+
+// 自定义通道加载 - 替代 freerdp_client_load_addins，只加载需要的通道
+static BOOL viDesk_LoadChannels(freerdp* instance) {
+    if (!instance || !instance->context)
+        return FALSE;
+
+    rdpSettings* settings = instance->context->settings;
+    rdpChannels* channels = instance->context->channels;
+
+    // 添加 RDPGFX 动态通道（GNOME Remote Desktop 必需）
+    if (freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline)) {
+        const char* const params[] = { RDPGFX_CHANNEL_NAME };
+        if (!freerdp_client_add_dynamic_channel(settings, 1, params))
+            return FALSE;
+    }
+
+    // 显示控制通道
+    if (freerdp_settings_get_bool(settings, FreeRDP_SupportDisplayControl)) {
+        const char* const params[] = { DISP_CHANNEL_NAME };
+        if (!freerdp_client_add_dynamic_channel(settings, 1, params))
+            return FALSE;
+    }
+
+    // 如果有动态通道，启用动态通道支持并加载 DRDYNVC SVC
+    if (freerdp_settings_get_uint32(settings, FreeRDP_DynamicChannelCount) > 0) {
+        if (!freerdp_settings_set_bool(settings, FreeRDP_SupportDynamicChannels, TRUE))
+            return FALSE;
+    }
+
+    if (freerdp_settings_get_bool(settings, FreeRDP_SupportDynamicChannels)) {
+        // 加载 DRDYNVC 静态虚拟通道（承载所有动态通道的 SVC）
+        // 先尝试 EntryEx 变体
+        PVIRTUALCHANNELENTRY pvce = freerdp_load_channel_addin_entry(
+            DRDYNVC_SVC_CHANNEL_NAME, NULL, NULL,
+            FREERDP_ADDIN_CHANNEL_STATIC | FREERDP_ADDIN_CHANNEL_ENTRYEX);
+
+        if (pvce) {
+            PVIRTUALCHANNELENTRYEX pvceex = (PVIRTUALCHANNELENTRYEX)pvce;
+            if (freerdp_channels_client_load_ex(channels, settings, pvceex, settings) != 0) {
+                viDesk_log("[ViDesk] LoadChannels: 加载 DRDYNVC (EntryEx) 失败\n");
+                return FALSE;
+            }
+            viDesk_log("[ViDesk] LoadChannels: DRDYNVC (EntryEx) 加载成功\n");
+        } else {
+            // 回退到普通入口
+            PVIRTUALCHANNELENTRY entry = freerdp_load_channel_addin_entry(
+                DRDYNVC_SVC_CHANNEL_NAME, NULL, NULL,
+                FREERDP_ADDIN_CHANNEL_STATIC);
+            if (entry) {
+                if (freerdp_channels_client_load(channels, settings, entry, settings) != 0) {
+                    viDesk_log("[ViDesk] LoadChannels: 加载 DRDYNVC 失败\n");
+                    return FALSE;
+                }
+                viDesk_log("[ViDesk] LoadChannels: DRDYNVC 加载成功\n");
+            } else {
+                viDesk_log("[ViDesk] LoadChannels: 找不到 DRDYNVC 通道入口\n");
+                return FALSE;
+            }
+        }
+    }
+
+    // 加载 cliprdr 剪贴板 SVC
+    if (freerdp_settings_get_bool(settings, FreeRDP_RedirectClipboard)) {
+        PVIRTUALCHANNELENTRY cliprdrEntry = freerdp_load_channel_addin_entry(
+            CLIPRDR_SVC_CHANNEL_NAME, NULL, NULL,
+            FREERDP_ADDIN_CHANNEL_STATIC | FREERDP_ADDIN_CHANNEL_ENTRYEX);
+
+        if (cliprdrEntry) {
+            PVIRTUALCHANNELENTRYEX cliprdrEntryEx = (PVIRTUALCHANNELENTRYEX)cliprdrEntry;
+            if (freerdp_channels_client_load_ex(channels, settings, cliprdrEntryEx, settings) != 0) {
+                viDesk_log("[ViDesk] LoadChannels: 加载 cliprdr (EntryEx) 失败\n");
+            } else {
+                viDesk_log("[ViDesk] LoadChannels: cliprdr (EntryEx) 加载成功\n");
+            }
+        } else {
+            PVIRTUALCHANNELENTRY entry = freerdp_load_channel_addin_entry(
+                CLIPRDR_SVC_CHANNEL_NAME, NULL, NULL,
+                FREERDP_ADDIN_CHANNEL_STATIC);
+            if (entry) {
+                if (freerdp_channels_client_load(channels, settings, entry, settings) != 0) {
+                    viDesk_log("[ViDesk] LoadChannels: 加载 cliprdr 失败\n");
+                } else {
+                    viDesk_log("[ViDesk] LoadChannels: cliprdr 加载成功\n");
+                }
+            } else {
+                viDesk_log("[ViDesk] LoadChannels: 找不到 cliprdr 通道入口\n");
+            }
+        }
+    }
+
+    viDesk_log("[ViDesk] LoadChannels: RDPGFX=%d, DISP=%d, DRDYNVC=%d, CLIPRDR=%d\n",
+        freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportDisplayControl),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportDynamicChannels),
+        freerdp_settings_get_bool(settings, FreeRDP_RedirectClipboard));
+
+    return TRUE;
+}
+
+// 通道连接事件处理器 - 当通道建立时初始化 GFX/cliprdr 等
+static void viDesk_OnChannelConnectedEventHandler(void* context, const ChannelConnectedEventArgs* e) {
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)context;
+    if (!viCtx || !e) return;
+
+    viDesk_log("[ViDesk] 通道已连接: %s\n", e->name);
+
+    if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0) {
+        CliprdrClientContext* cliprdr = (CliprdrClientContext*)e->pInterface;
+        viDesk_cliprdr_init(viCtx, cliprdr);
+    }
+
+    // 委托给 FreeRDP 公共处理器（处理 GFX 管道初始化等）
+    freerdp_client_OnChannelConnectedEventHandler(context, e);
+}
+
+// 通道断开事件处理器
+static void viDesk_OnChannelDisconnectedEventHandler(void* context, const ChannelDisconnectedEventArgs* e) {
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)context;
+    if (!viCtx || !e) return;
+
+    viDesk_log("[ViDesk] 通道已断开: %s\n", e->name);
+
+    if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0) {
+        CliprdrClientContext* cliprdr = (CliprdrClientContext*)e->pInterface;
+        viDesk_cliprdr_uninit(viCtx, cliprdr);
+    }
+
+    freerdp_client_OnChannelDisconnectedEventHandler(context, e);
+}
+
 // FreeRDP 回调 - PreConnect
 static BOOL viDesk_PreConnect(freerdp* instance) {
     if (!instance || !instance->context)
@@ -99,6 +503,12 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
         return FALSE;
 
     viDesk_log("[ViDesk] PreConnect 开始配置...\n");
+
+    // 注册通道连接/断开事件处理器（GFX 管道初始化依赖此事件）
+    PubSub_SubscribeChannelConnected(instance->context->pubSub,
+        viDesk_OnChannelConnectedEventHandler);
+    PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
+        viDesk_OnChannelDisconnectedEventHandler);
 
     // 配置 GDI
     if (!freerdp_settings_set_bool(settings, FreeRDP_SoftwareGdi, TRUE))
@@ -124,29 +534,14 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, TRUE);
     freerdp_settings_set_bool(settings, FreeRDP_CompressionEnabled, TRUE);
 
-    // === xrdp 兼容性配置 ===
-    // 禁用网络自动检测 - xrdp 不支持，会导致 messageChannelId 错位
-    freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, FALSE);
-
-    // 禁用心跳 PDU - 与 NetworkAutoDetect 共用 message channel，一起禁用避免 channel ID 错位
-    freerdp_settings_set_bool(settings, FreeRDP_SupportHeartbeatPdu, FALSE);
-
-    // 禁用 GFX 图形管线 - xrdp 不支持 RDP 8.0+ 图形管线
-    freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_GfxThinClient, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_GfxSmallCache, FALSE);
-
-    // 禁用显示器布局 PDU - xrdp 不支持动态显示器变更
-    freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, FALSE);
-
-    // xrdp 在未宣告 CAPSTYPE_GLYPHCACHE 能力的情况下使用 glyph cache 命令
-    // 需要放宽检查，否则 FreeRDP 3.x 严格模式会拒绝
-    freerdp_settings_set_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer, TRUE);
-    freerdp_settings_set_uint32(settings, FreeRDP_GlyphSupportLevel, 2);
+    // === GFX 图形管道 - GNOME Remote Desktop 依赖此功能 ===
+    freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, TRUE);
 
     // 禁用 FreeRDP 内部自动重连，由应用层控制重连逻辑
     freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, FALSE);
+
+    // === 剪贴板重定向 ===
+    freerdp_settings_set_bool(settings, FreeRDP_RedirectClipboard, TRUE);
 
     // === 协议兼容性配置 ===
     freerdp_settings_set_bool(settings, FreeRDP_SupportErrorInfoPdu, TRUE);
@@ -157,15 +552,41 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     BOOL rdp = freerdp_settings_get_bool(settings, FreeRDP_RdpSecurity);
     viDesk_log("[ViDesk] 安全协议: NLA=%d, TLS=%d, RDP=%d\n", nla, tls, rdp);
 
-    // 验证 xrdp 兼容设置
-    viDesk_log("[ViDesk] PreConnect 验证: AutoDetect=%d, Heartbeat=%d, GFX=%d, GlyphLevel=%u, AllowUnannounced=%d\n",
-        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
-        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu),
+    viDesk_log("[ViDesk] PreConnect 验证: GFX=%d, AutoDetect=%d, Heartbeat=%d\n",
         freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline),
-        freerdp_settings_get_uint32(settings, FreeRDP_GlyphSupportLevel),
-        freerdp_settings_get_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer));
+        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu));
 
     viDesk_log("[ViDesk] PreConnect 配置完成\n");
+
+    return TRUE;
+}
+
+// 桌面分辨率变更回调
+static BOOL viDesk_DesktopResize(rdpContext* context) {
+    if (!context || !context->gdi || !context->settings)
+        return FALSE;
+
+    rdpGdi* gdi = context->gdi;
+    rdpSettings* settings = context->settings;
+
+    UINT32 width = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+    UINT32 height = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+
+    viDesk_log("[ViDesk] 桌面分辨率变更: %ux%u\n", width, height);
+
+    if (!gdi_resize(gdi, width, height))
+        return FALSE;
+
+    // 更新 ViDesk 帧缓冲区信息
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)context;
+    ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
+    if (ctx) {
+        ctx->frameWidth = gdi->width;
+        ctx->frameHeight = gdi->height;
+        ctx->frameBuffer = gdi->primary_buffer;
+        notifyDesktopResize(ctx, gdi->width, gdi->height);
+    }
 
     return TRUE;
 }
@@ -187,6 +608,9 @@ static BOOL viDesk_PostConnect(freerdp* instance) {
     if (!gdi)
         return FALSE;
 
+    // 注册 update 回调（gdi_init 之后）
+    context->update->DesktopResize = viDesk_DesktopResize;
+
     // 更新帧缓冲区信息
     if (ctx) {
         ctx->frameWidth = gdi->width;
@@ -199,7 +623,7 @@ static BOOL viDesk_PostConnect(freerdp* instance) {
         notifyStateChange(ctx, 3, "Connected");  // 3 = connected
     }
 
-    // GFX 图形管线初始化需要正确配置的通道，暂不使用
+    viDesk_log("[ViDesk] PostConnect 完成: 分辨率=%dx%d, GDI已初始化\n", gdi->width, gdi->height);
 
     return TRUE;
 }
@@ -208,6 +632,12 @@ static BOOL viDesk_PostConnect(freerdp* instance) {
 static void viDesk_PostDisconnect(freerdp* instance) {
     if (!instance || !instance->context)
         return;
+
+    // 取消订阅通道事件
+    PubSub_UnsubscribeChannelConnected(instance->context->pubSub,
+        viDesk_OnChannelConnectedEventHandler);
+    PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub,
+        viDesk_OnChannelDisconnectedEventHandler);
 
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
@@ -233,16 +663,15 @@ static BOOL viDesk_EndPaint(rdpContext* context) {
     ViDeskClientContext* viCtx = (ViDeskClientContext*)context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
-    if (ctx && gdi->primary->hdc->hwnd->invalid->null == FALSE) {
+    if (ctx && gdi->primary && gdi->primary->hdc && gdi->primary->hdc->hwnd &&
+        gdi->primary->hdc->hwnd->invalid &&
+        gdi->primary->hdc->hwnd->invalid->null == FALSE) {
         int x = gdi->primary->hdc->hwnd->invalid->x;
         int y = gdi->primary->hdc->hwnd->invalid->y;
         int w = gdi->primary->hdc->hwnd->invalid->w;
         int h = gdi->primary->hdc->hwnd->invalid->h;
 
-        // 更新帧缓冲区指针
         ctx->frameBuffer = gdi->primary_buffer;
-
-        // 通知更新区域
         notifyFrameUpdate(ctx, x, y, w, h);
     }
 
@@ -443,6 +872,18 @@ static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** passw
 
 // === 公共 API 实现 ===
 
+// freerdp_client_context_new 回调
+static BOOL viDesk_ClientNew(freerdp* instance, rdpContext* context) {
+    (void)instance;
+    (void)context;
+    return TRUE;
+}
+
+static void viDesk_ClientFree(freerdp* instance, rdpContext* context) {
+    (void)instance;
+    (void)context;
+}
+
 ViDeskContext* viDesk_createContext(void) {
     ViDeskContext* ctx = (ViDeskContext*)calloc(1, sizeof(ViDeskContext));
     if (!ctx) {
@@ -450,44 +891,43 @@ ViDeskContext* viDesk_createContext(void) {
         return NULL;
     }
 
-    // 创建 FreeRDP 实例
-    freerdp* instance = freerdp_new();
-    if (!instance) {
-        setLastError("Failed to create FreeRDP instance");
+    // 使用 freerdp_client_context_new 创建实例和上下文
+    // 这会自动注册静态通道表（DRDYNVC、RDPGFX 等）
+    RDP_CLIENT_ENTRY_POINTS clientEntryPoints = {0};
+    clientEntryPoints.Size = sizeof(RDP_CLIENT_ENTRY_POINTS);
+    clientEntryPoints.Version = RDP_CLIENT_INTERFACE_VERSION;
+    clientEntryPoints.ContextSize = sizeof(ViDeskClientContext);
+    clientEntryPoints.ClientNew = viDesk_ClientNew;
+    clientEntryPoints.ClientFree = viDesk_ClientFree;
+
+    rdpContext* context = freerdp_client_context_new(&clientEntryPoints);
+    if (!context) {
+        setLastError("Failed to create FreeRDP client context");
         free(ctx);
         return NULL;
     }
 
-    // 设置上下文大小
-    instance->ContextSize = sizeof(ViDeskClientContext);
+    freerdp* instance = context->instance;
 
     // 设置回调
+    instance->LoadChannels = viDesk_LoadChannels;
     instance->PreConnect = viDesk_PreConnect;
     instance->PostConnect = viDesk_PostConnect;
     instance->PostDisconnect = viDesk_PostDisconnect;
-    // 优先使用 AuthenticateEx（支持 NLA），如果没有设置则使用 Authenticate
     instance->AuthenticateEx = viDesk_AuthenticateEx;
     instance->Authenticate = viDesk_Authenticate;
     instance->VerifyCertificateEx = viDesk_VerifyCertificateEx;
     instance->VerifyChangedCertificateEx = viDesk_VerifyChangedCertificateEx;
 
-    // 创建上下文
-    if (!freerdp_context_new(instance)) {
-        setLastError("Failed to create FreeRDP context");
-        freerdp_free(instance);
-        free(ctx);
-        return NULL;
-    }
-
     // 关联 ViDesk 上下文
-    ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)context;
     viCtx->viDeskCtx = ctx;
 
     // 保存引用
-    ctx->rdpCtx = instance->context;
+    ctx->rdpCtx = context;
 
     // 设置 EndPaint 回调
-    instance->context->update->EndPaint = viDesk_EndPaint;
+    context->update->EndPaint = viDesk_EndPaint;
 
     // 初始化默认值
     ctx->frameBytesPerPixel = 4;
@@ -503,13 +943,10 @@ void viDesk_destroyContext(ViDeskContext* ctx) {
 
     if (ctx->rdpCtx) {
         freerdp* instance = ctx->rdpCtx->instance;
-        if (instance) {
-            if (ctx->isConnected) {
-                freerdp_disconnect(instance);
-            }
-            freerdp_context_free(instance);
-            freerdp_free(instance);
+        if (instance && ctx->isConnected) {
+            freerdp_disconnect(instance);
         }
+        freerdp_client_context_free(ctx->rdpCtx);
     }
 
     free(ctx);
@@ -749,25 +1186,12 @@ bool viDesk_connect(ViDeskContext* ctx) {
                port,
                username ? username : "N/A");    }
 
-    // === xrdp 兼容性: 在 connect 之前再次确认设置 ===
-    freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_SupportHeartbeatPdu, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_GfxThinClient, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_GfxSmallCache, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, FALSE);
-    freerdp_settings_set_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer, TRUE);
-    freerdp_settings_set_uint32(settings, FreeRDP_GlyphSupportLevel, 2);
     freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, FALSE);
 
-    viDesk_log("[ViDesk] xrdp 兼容: AutoDetect=%d, Heartbeat=%d, GFX=%d, Multitransport=%d, GlyphLevel=%u, AutoReconnect=%d\n",
-        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
-        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu),
+    viDesk_log("[ViDesk] 连接设置: GFX=%d, AutoDetect=%d, Heartbeat=%d\n",
         freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline),
-        freerdp_settings_get_bool(settings, FreeRDP_SupportMultitransport),
-        freerdp_settings_get_uint32(settings, FreeRDP_GlyphSupportLevel),
-        freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled));
+        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu));
 
     // 通知状态变化
     notifyStateChange(ctx, 1, "Connecting...");  // 1 = connecting
@@ -976,18 +1400,30 @@ bool viDesk_setClipboardText(ViDeskContext* ctx, const char* text) {
     if (!ctx || !ctx->rdpCtx || !ctx->isConnected || !text)
         return false;
 
-    // TODO: 实现剪贴板通道发送
-    // 需要 cliprdr 通道支持
-    return true;
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)ctx->rdpCtx;
+    if (!viCtx || !viCtx->cliprdr)
+        return false;
+
+    // 缓存本地文本
+    free(viCtx->localClipboardText);
+    viCtx->localClipboardText = _strdup(text);
+    if (!viCtx->localClipboardText)
+        return false;
+
+    // 通知服务器：客户端有新的剪贴板内容
+    UINT rc = viDesk_cliprdr_send_client_format_list(viCtx->cliprdr);
+    return (rc == CHANNEL_RC_OK);
 }
 
 char* viDesk_getClipboardText(ViDeskContext* ctx) {
     if (!ctx || !ctx->rdpCtx || !ctx->isConnected)
         return NULL;
 
-    // TODO: 实现剪贴板通道接收
-    // 需要 cliprdr 通道支持
-    return NULL;
+    ViDeskClientContext* viCtx = (ViDeskClientContext*)ctx->rdpCtx;
+    if (!viCtx || !viCtx->remoteClipboardText)
+        return NULL;
+
+    return _strdup(viCtx->remoteClipboardText);
 }
 
 void viDesk_freeString(char* str) {

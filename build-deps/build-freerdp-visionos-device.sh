@@ -128,7 +128,13 @@ mkdir -p "${PROJECT_LIB}" "${PROJECT_INC}"
 # 复制已编译的库文件
 cp "${BUILD_DIR}/winpr/libwinpr/libwinpr3.a" "${PROJECT_LIB}/" 2>/dev/null || true
 cp "${BUILD_DIR}/libfreerdp/libfreerdp3.a" "${PROJECT_LIB}/" 2>/dev/null || true
-cp "${BUILD_DIR}/client/common/libfreerdp-client3.a" "${PROJECT_LIB}/" 2>/dev/null || true
+
+# 合并 libfreerdp-client3.a 和通道公共库（如 remdesk-common）
+CLIENT_LIBS=("${BUILD_DIR}/client/common/libfreerdp-client3.a")
+for common_lib in "${BUILD_DIR}"/channels/*/common/lib*-common.a; do
+    [ -f "$common_lib" ] && CLIENT_LIBS+=("$common_lib")
+done
+libtool -static -o "${PROJECT_LIB}/libfreerdp-client3.a" "${CLIENT_LIBS[@]}"
 
 # 复制头文件
 mkdir -p "${PROJECT_INC}/freerdp" "${PROJECT_INC}/winpr"

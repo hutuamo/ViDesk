@@ -1,8 +1,8 @@
 # ViDesk 开发进展
 
-## 项目状态: FreeRDP 连接功能测试中，UI 问题已修复
+## 项目状态: RDP 连接成功，远程画面可显示
 
-**最后更新**: 2026-01-18
+**最后更新**: 2026-02-16
 
 ---
 
@@ -63,11 +63,13 @@
 | `FreeRDPContext.swift` | ✅ 完成 | Swift 封装，类型安全 API |
 
 **FreeRDPBridge.c 实现内容**:
-- `viDesk_createContext()`: 调用 `freerdp_new()` 和 `freerdp_context_new()`
+- `viDesk_createContext()`: 使用 `freerdp_client_context_new()` (非 `freerdp_context_new()`)
 - `viDesk_connect()`: 调用 `freerdp_connect()`
 - `viDesk_disconnect()`: 调用 `freerdp_disconnect()`
 - `viDesk_processEvents()`: 使用 `freerdp_get_event_handles()` 和 `freerdp_check_event_handles()`
-- 回调实现: PreConnect, PostConnect, PostDisconnect, EndPaint
+- 回调实现: PreConnect, PostConnect, PostDisconnect, EndPaint, DesktopResize
+- 通道加载: 自定义 `viDesk_LoadChannels` 显式加载 DRDYNVC SVC
+- GFX 管道: PubSub ChannelConnected 事件订阅 → `gdi_graphics_pipeline_init()`
 - 证书验证: `viDesk_VerifyCertificateEx`
 - 认证回调: `viDesk_Authenticate`
 - 输入事件: `freerdp_input_send_mouse_event()`, `freerdp_input_send_keyboard_event()`
@@ -254,9 +256,12 @@ libcjson.a          30KB
 | visionOS 模拟器启动 | ✅ 通过 |
 | 连接列表界面 | ✅ 通过 |
 | 快速连接输入 | ✅ 通过 |
-| 连接流程 (FreeRDP) | ⚠️ 连接失败: "transport layer failed" |
+| RDP 连接 (GNOME Remote Desktop) | ✅ 通过 |
+| 远程画面显示 | ✅ 通过 (GFX 管道 + 分辨率调整) |
 | 错误界面按钮响应 | ✅ 通过 (已修复) |
-| 远程桌面占位界面 | ✅ 通过 |
+| 鼠标/键盘输入 | ⏳ 待测试 |
+| 剪贴板同步 | ⏳ 待测试 |
+| Windows RDP 连接 | ⏳ 待测试 |
 
 ---
 
@@ -264,7 +269,8 @@ libcjson.a          30KB
 
 | 问题 | 状态 | 说明 |
 |------|------|------|
-| RDP 连接失败 | ⏳ 调试中 | "The connection transport layer failed"，可能是模拟器网络限制 |
+| ~~RDP 连接失败~~ | ✅ 已修复 | DRDYNVC/GFX 通道 + 桌面分辨率回调 |
 | 仅支持模拟器 | ⏳ 待处理 | 需要编译 visionOS device 版本库 |
 | 音频通道禁用 | ⏳ 待处理 | visionOS 不支持 CoreAudio |
 | 手势未真机测试 | ⏳ 待处理 | 需要 Vision Pro 真机 |
+| 无 H.264 支持 | ⏳ 待处理 | WITH_GFX_H264=OFF |

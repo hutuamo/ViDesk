@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-ViDesk 是一个运行在 Apple Vision Pro 上的远程桌面协议 (RDP) 客户端应用。
+ViDesk 是一个运行在 Apple Vision Pro 上的远程桌面协议 (RDP) 客户端应用, Linux 服务端使用 GNOME Remote Desktop
 
 **技术栈**: visionOS 2.0+ / Swift 5.9+ / SwiftUI / SwiftData / Metal / FreeRDP
 

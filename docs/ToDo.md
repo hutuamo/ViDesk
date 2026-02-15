@@ -39,7 +39,7 @@
 `FreeRDPBridge.c` 已替换为真实的 FreeRDP API 调用:
 
 ```
-[x] viDesk_createContext(): 调用 freerdp_new() 和 freerdp_context_new()
+[x] viDesk_createContext(): 使用 freerdp_client_context_new()
 [x] viDesk_connect(): 调用 freerdp_connect()
 [x] viDesk_disconnect(): 调用 freerdp_disconnect()
 [x] viDesk_processEvents(): 实现事件循环 (freerdp_check_event_handles)
@@ -50,8 +50,11 @@
 [x] 修复 ios_get_* 内存管理 (使用 strdup)
 [x] 增强 PreConnect 配置 (安全协商、超时、压缩)
 [x] 修复错误界面按钮响应问题
-[ ] 调试连接失败: "transport layer failed"
-[ ] 实现剪贴板通道 (cliprdr) - 待后续完善
+[x] DRDYNVC SVC 通道显式加载
+[x] GFX 管道初始化 (PubSub ChannelConnected 事件)
+[x] 桌面分辨率变更回调 (DesktopResize)
+[x] 成功连接到 GNOME Remote Desktop 并显示画面
+[x] 实现剪贴板通道 (cliprdr) - 文本双向同步
 ```
 
 ---
@@ -216,10 +219,11 @@
 | ~~ios_get_* 内存管理~~ | ✅ 已修复 | 改用 strdup() 返回动态分配内存 |
 | ~~错误界面按钮无响应~~ | ✅ 已修复 | 重构视图，错误时不渲染 canvas |
 | ~~工具栏/虚拟键盘按钮无响应~~ | ✅ 已修复 | 改用 borderless 样式 + zIndex + allowsHitTesting |
-| RDP 连接失败 | ⏳ 调试中 | "transport layer failed"，可能是模拟器网络限制 |
+| ~~RDP 连接失败~~ | ✅ 已修复 | DRDYNVC/GFX 通道加载 + 桌面分辨率回调 |
 | 音频通道禁用 | ⏳ | visionOS 不支持 CoreAudio |
 | 仅支持模拟器 | ⏳ | 需要编译 device 版本库 |
 | 手势未真机测试 | ⏳ | 需要 Vision Pro 真机 |
+| 无 H.264 支持 | ⏳ | 编译时 WITH_GFX_H264=OFF，使用 RFX/Planar 等编解码器 |
 
 ---
 
@@ -232,11 +236,11 @@
 - [x] **FreeRDPBridge.c 真实实现** ✅
 - [x] **ios_get_* 内存管理修复** ✅
 - [x] **错误界面按钮响应修复** ✅
-- [ ] 调试 RDP 连接失败 (transport layer failed) ← **下一步**
-- [ ] 能够连接到 Windows 远程桌面
-- [ ] 能够看到远程画面
-- [ ] 能够使用手势操作
-- [ ] 能够使用键盘输入
+- [x] **RDP 连接成功** ✅ (GNOME Remote Desktop / Ubuntu)
+- [x] **远程画面显示** ✅ (GFX 管道 + 桌面分辨率调整)
+- [ ] 测试鼠标/键盘输入 ← **下一步**
+- [ ] 测试剪贴板同步
+- [ ] 测试与 Windows 远程桌面的连接
 
 ### v0.2.0 - 功能完善版本
 - [ ] 音频转发
@@ -266,20 +270,17 @@
 
 ## 下一步
 
-调试 RDP 连接失败问题 ("The connection transport layer failed"):
+RDP 连接和画面显示已成功，当前重点：
 
-1. **可能原因分析**:
-   - visionOS 模拟器网络沙箱限制
-   - FreeRDP 配置参数不完整
-   - TCP 连接被模拟器阻止
+1. **输入功能验证**:
+   - 测试鼠标移动、点击、拖拽
+   - 测试键盘输入
+   - 测试特殊按键组合 (Ctrl+Alt+Del 等)
 
-2. **调试方向**:
-   - 在 FreeRDPBridge.c 中添加更多日志输出
-   - 检查 FreeRDP 错误码和详细错误信息
-   - 尝试编译 visionOS device 版本并在真机测试
-   - 对比其他平台 (iOS/macOS) 的 FreeRDP 配置
+2. **剪贴板同步**:
+   - 测试双向剪贴板同步
+   - 启用 cliprdr 通道
 
-3. **测试需要**:
-   - 有一个可访问的 Windows 远程桌面服务器
-   - 确保网络连接正常 (已验证: macOS RDP 客户端可以连接)
-   - 验证用户名/密码正确
+3. **Windows 远程桌面兼容性**:
+   - 测试与 Windows RDP 服务端的连接
+   - 测试 NLA 认证流程

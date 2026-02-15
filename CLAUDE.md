@@ -74,7 +74,7 @@ C 层 (FreeRDP + WinPR + OpenSSL)
 - `FreeRDPBridge.h/c`：定义 `ViDeskContext` 结构体和 `viDesk_*` 系列 C API（连接、输入、帧缓冲、剪贴板）
 - `FreeRDPContext.swift`：将 C 回调转为 Swift async/await，管理 `ViDeskContext` 生命周期
 - `iOSPathHelpers.m`：Objective-C 路径辅助函数（使用 strdup 返回动态内存）
-- 回调类型：FrameUpdateCallback、ConnectionStateCallback、AuthenticateCallback、VerifyCertificateCallback
+- 回调类型：FrameUpdateCallback、ConnectionStateCallback、DesktopResizeCallback、AuthenticateCallback、VerifyCertificateCallback
 
 ### VisionOS 输入映射
 
@@ -96,6 +96,8 @@ C 层 (FreeRDP + WinPR + OpenSSL)
 
 ## 当前开发状态
 
-FreeRDPBridge.c 真实实现已完成。当前阻塞问题：RDP 连接时报 "transport layer failed"，可能与 visionOS 模拟器网络沙箱有关。详见 `docs/ToDo.md` 和 `docs/Progress.md`。
+RDP 连接和远程画面显示已成功（连接到 GNOME Remote Desktop / Ubuntu）。使用 GFX 管道（非 H.264，RDPGFX_CAPVERSION_107）。
 
-仅支持 visionOS Simulator，visionOS Device 版本的库编译尚未完成。
+当前重点：输入功能验证（鼠标/键盘）、剪贴板同步、Windows RDP 兼容性测试。
+
+仅支持 visionOS Simulator，visionOS Device 版本的库编译尚未完成。详见 `docs/ToDo.md` 和 `docs/Progress.md`。

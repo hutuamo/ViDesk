@@ -18,6 +18,9 @@ final class RDPSession {
     /// 当前帧缓冲区 (用于渲染)
     private(set) var frameBuffer: FrameBuffer?
 
+    /// 远程剪贴板文本 (当远程用户复制文本时更新)
+    private(set) var remoteClipboardText: String?
+
     // MARK: - 私有属性
 
     private let context: FreeRDPContext
@@ -170,9 +173,21 @@ final class RDPSession {
             }
         }
 
+        context.setDesktopResizeHandler { [weak self] size in
+            Task { @MainActor in
+                self?.handleDesktopResize(size: size)
+            }
+        }
+
         context.setStateChangeHandler { [weak self] connectionState in
             Task { @MainActor in
                 self?.handleConnectionStateChange(connectionState)
+            }
+        }
+
+        context.setRemoteClipboardChangedHandler { [weak self] text in
+            Task { @MainActor in
+                self?.handleRemoteClipboardChanged(text)
             }
         }
     }
@@ -266,9 +281,28 @@ final class RDPSession {
         )
     }
 
+    private func handleRemoteClipboardChanged(_ text: String) {
+        vLog("远程剪贴板更新: \(text.prefix(50))...")
+        remoteClipboardText = text
+    }
+
+    private func handleDesktopResize(size: CGSize) {
+        let newWidth = Int(size.width)
+        let newHeight = Int(size.height)
+        vLog("桌面分辨率变更: \(frameBuffer?.width ?? 0)x\(frameBuffer?.height ?? 0) -> \(newWidth)x\(newHeight)")
+        initializeFrameBuffer()
+    }
+
     private func handleFrameUpdate(rect: CGRect) {
         guard let frameBuffer = frameBuffer,
               let sourceBuffer = context.frameBuffer else { return }
+
+        // 跳过尺寸不匹配的帧（等待 resize 回调重建 FrameBuffer）
+        let w = Int(rect.size.width)
+        let h = Int(rect.size.height)
+        let x = Int(rect.origin.x)
+        let y = Int(rect.origin.y)
+        if x + w > frameBuffer.width || y + h > frameBuffer.height { return }
 
         frameBuffer.update(from: sourceBuffer, region: rect)
     }
