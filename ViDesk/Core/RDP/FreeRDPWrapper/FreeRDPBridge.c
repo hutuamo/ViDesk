@@ -126,8 +126,10 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
 
     // === xrdp 兼容性配置 ===
     // 禁用网络自动检测 - xrdp 不支持，会导致 messageChannelId 错位
-    // 引发 "expected PDU_TYPE_DEMAND_ACTIVE, got PDU_TYPE_DEACTIVATE_ALL"
     freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, FALSE);
+
+    // 禁用心跳 PDU - 与 NetworkAutoDetect 共用 message channel，一起禁用避免 channel ID 错位
+    freerdp_settings_set_bool(settings, FreeRDP_SupportHeartbeatPdu, FALSE);
 
     // 禁用 GFX 图形管线 - xrdp 不支持 RDP 8.0+ 图形管线
     freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, FALSE);
@@ -138,6 +140,14 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, FALSE);
     freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, FALSE);
 
+    // xrdp 在未宣告 CAPSTYPE_GLYPHCACHE 能力的情况下使用 glyph cache 命令
+    // 需要放宽检查，否则 FreeRDP 3.x 严格模式会拒绝
+    freerdp_settings_set_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer, TRUE);
+    freerdp_settings_set_uint32(settings, FreeRDP_GlyphSupportLevel, 2);
+
+    // 禁用 FreeRDP 内部自动重连，由应用层控制重连逻辑
+    freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, FALSE);
+
     // === 协议兼容性配置 ===
     freerdp_settings_set_bool(settings, FreeRDP_SupportErrorInfoPdu, TRUE);
 
@@ -146,6 +156,14 @@ static BOOL viDesk_PreConnect(freerdp* instance) {
     BOOL tls = freerdp_settings_get_bool(settings, FreeRDP_TlsSecurity);
     BOOL rdp = freerdp_settings_get_bool(settings, FreeRDP_RdpSecurity);
     viDesk_log("[ViDesk] 安全协议: NLA=%d, TLS=%d, RDP=%d\n", nla, tls, rdp);
+
+    // 验证 xrdp 兼容设置
+    viDesk_log("[ViDesk] PreConnect 验证: AutoDetect=%d, Heartbeat=%d, GFX=%d, GlyphLevel=%u, AllowUnannounced=%d\n",
+        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline),
+        freerdp_settings_get_uint32(settings, FreeRDP_GlyphSupportLevel),
+        freerdp_settings_get_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer));
 
     viDesk_log("[ViDesk] PreConnect 配置完成\n");
 
@@ -730,6 +748,26 @@ bool viDesk_connect(ViDeskContext* ctx) {
                hostname ? hostname : "N/A",
                port,
                username ? username : "N/A");    }
+
+    // === xrdp 兼容性: 在 connect 之前再次确认设置 ===
+    freerdp_settings_set_bool(settings, FreeRDP_NetworkAutoDetect, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_SupportHeartbeatPdu, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_SupportMultitransport, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_GfxThinClient, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_GfxSmallCache, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_SupportMonitorLayoutPdu, FALSE);
+    freerdp_settings_set_bool(settings, FreeRDP_AllowUnanouncedOrdersFromServer, TRUE);
+    freerdp_settings_set_uint32(settings, FreeRDP_GlyphSupportLevel, 2);
+    freerdp_settings_set_bool(settings, FreeRDP_AutoReconnectionEnabled, FALSE);
+
+    viDesk_log("[ViDesk] xrdp 兼容: AutoDetect=%d, Heartbeat=%d, GFX=%d, Multitransport=%d, GlyphLevel=%u, AutoReconnect=%d\n",
+        freerdp_settings_get_bool(settings, FreeRDP_NetworkAutoDetect),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportHeartbeatPdu),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportGraphicsPipeline),
+        freerdp_settings_get_bool(settings, FreeRDP_SupportMultitransport),
+        freerdp_settings_get_uint32(settings, FreeRDP_GlyphSupportLevel),
+        freerdp_settings_get_bool(settings, FreeRDP_AutoReconnectionEnabled));
 
     // 通知状态变化
     notifyStateChange(ctx, 1, "Connecting...");  // 1 = connecting

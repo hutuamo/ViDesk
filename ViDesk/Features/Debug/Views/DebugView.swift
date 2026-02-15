@@ -139,7 +139,7 @@ struct DebugView: View {
                 }
 
                 if fileLogContent.isEmpty {
-                    Text("点击"刷新日志"查看")
+                    Text("点击'刷新日志'查看")
                         .foregroundStyle(.secondary)
                 } else {
                     ScrollView {

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -63,7 +63,7 @@
 		7A720AC364E05D947CA88584 /* GestureTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureTranslator.swift; sourceTree = "<group>"; };
 		80B2C971CDFE4CDE1667DF7F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8188C14B77C4187CCEE8F867 /* SessionToolbarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionToolbarView.swift; sourceTree = "<group>"; };
-		82AAF1EC8824B35ED23654BF /* ViDesk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ViDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		82AAF1EC8824B35ED23654BF /* ViDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		845700BC9FA548580204542B /* RemoteDesktopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDesktopView.swift; sourceTree = "<group>"; };
 		85E4C93BBCF64067ABC1E3E9 /* SessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionState.swift; sourceTree = "<group>"; };
 		8C6374854C82CD62424FB00E /* RemoteDesktopViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDesktopViewModel.swift; sourceTree = "<group>"; };
@@ -358,11 +358,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
-				TargetAttributes = {
-					484E15D9E30227BC4AFC114D = {
-						DevelopmentTeam = "";
-					};
-				};
 			};
 			buildConfigurationList = B9DF21A207A9A5FAD69230C7 /* Build configuration list for PBXProject "ViDesk" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -374,7 +369,6 @@
 			);
 			mainGroup = 94658DC4EBDB85791C70C621;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -444,18 +438,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JD87F5U2LQ;
 				GCC_C_LANGUAGE_STANDARD = c11;
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/FreeRDPFramework/include",
-				);
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/include";
 				INFOPLIST_FILE = ViDesk/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/FreeRDPFramework/lib",
-				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/lib";
 				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ViDesk/Core/Rendering/Shaders";
 				OTHER_LDFLAGS = (
 					"-lfreerdp3",
@@ -541,18 +532,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JD87F5U2LQ;
 				GCC_C_LANGUAGE_STANDARD = c11;
-				HEADER_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/FreeRDPFramework/include",
-				);
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/include";
 				INFOPLIST_FILE = ViDesk/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/FreeRDPFramework/lib",
-				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/FreeRDPFramework/lib";
 				MTL_HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/ViDesk/Core/Rendering/Shaders";
 				OTHER_LDFLAGS = (
 					"-lfreerdp3",
