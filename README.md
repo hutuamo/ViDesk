@@ -166,7 +166,7 @@ FreeRDP 解码帧
        ▼
 ┌─────────────┐
 │ FrameBuffer │  CPU 内存中的像素数据
-│  (RGBA)     │  支持增量更新 (脏区域)
+│  (BGRA32)   │  支持增量更新 (脏区域)
 └──────┬──────┘
        │ copyToTexture()
        ▼
@@ -262,6 +262,7 @@ final class ConnectionConfig {
     var autoReconnect: Bool
     var gatewayHostname: String?
     var useNLA: Bool
+    var useTLS: Bool
     var ignoreCertificateErrors: Bool
 }
 ```

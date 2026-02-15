@@ -65,7 +65,7 @@ final class ConnectionConfig {
         autoReconnect: Bool = true,
         gatewayHostname: String? = nil,
         useNLA: Bool = false,
-        useTLS: Bool = false,
+        useTLS: Bool = true,
         ignoreCertificateErrors: Bool = true
     ) {
         self.id = id

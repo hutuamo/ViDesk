@@ -98,6 +98,11 @@ final class FreeRDPContext: @unchecked Sendable {
         onCertificateVerify = handler
     }
 
+    /// 暴露原始上下文指针，用于后台线程事件处理
+    var rawContextPointer: UnsafeMutablePointer<ViDeskContext>? {
+        context
+    }
+
     // MARK: - 配置
 
     /// 设置服务器
@@ -110,20 +115,6 @@ final class FreeRDPContext: @unchecked Sendable {
 
     /// 设置凭证
     func setCredentials(username: String, password: String, domain: String? = nil) -> Bool {
-        // #region agent log
-        let logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log"
-        let logEntry = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"FreeRDPContext.swift:112","message":"setCredentials调用","data":{"username":"\(username)","passwordLength":\(password.count),"domain":"\(domain ?? "")","passwordIsEmpty":\(password.isEmpty)},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-        if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            defer { try? fileHandle.close() }
-            try? fileHandle.seekToEnd()
-            try? fileHandle.write(contentsOf: logEntry.data(using: .utf8) ?? Data())
-        } else {
-            try? FileManager.default.createDirectory(atPath: "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor", withIntermediateDirectories: true, attributes: nil)
-            try? logEntry.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
         guard let ctx = context else { return false }
 
         let result = username.withCString { usernamePtr in
@@ -137,18 +128,6 @@ final class FreeRDPContext: @unchecked Sendable {
                 }
             }
         }
-        // #region agent log
-        let logEntry2 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"FreeRDPContext.swift:126","message":"setCredentials结果","data":{"result":\(result)},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-        if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            defer { try? fileHandle.close() }
-            try? fileHandle.seekToEnd()
-            try? fileHandle.write(contentsOf: logEntry2.data(using: .utf8) ?? Data())
-        } else {
-            try? logEntry2.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
         return result
     }
 
@@ -194,10 +173,15 @@ final class FreeRDPContext: @unchecked Sendable {
 
     // MARK: - 连接管理
 
-    /// 连接到远程主机
+    /// 连接到远程主机（在后台线程执行，避免阻塞 UI）
     func connect() async -> Bool {
         guard let ctx = context else { return false }
-        return viDesk_connect(ctx)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = viDesk_connect(ctx)
+                continuation.resume(returning: result)
+            }
+        }
     }
 
     /// 断开连接
@@ -330,23 +314,7 @@ final class FreeRDPContext: @unchecked Sendable {
         // 如果需要动态获取凭证（例如从 Keychain），可以在这里实现
         callbacks.onAuthenticate = { (context, username, password, domain) in
             guard let context = context else { return false }
-            let wrapper = Unmanaged<FreeRDPContext>.fromOpaque(context).takeUnretainedValue()
-            
-            // #region agent log
-            let logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log"
-            let logEntry = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"FreeRDPContext.swift:340","message":"认证回调被调用","data":{"usernameProvided":\(username != nil && username!.pointee != nil ? 1 : 0),"passwordProvided":\(password != nil && password!.pointee != nil ? 1 : 0)},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}
-"""
-            if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry.data(using: .utf8) ?? Data())
-            } else {
-                try? FileManager.default.createDirectory(atPath: "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor", withIntermediateDirectories: true, attributes: nil)
-                try? logEntry.write(toFile: logPath, atomically: true, encoding: .utf8)
-            }
-            // #endregion
-            
+            let wrapper = Unmanaged<FreeRDPContext>.fromOpaque(context).takeUnretainedValue()            
             // 如果设置了认证处理器，调用它获取凭证
             if let handler = wrapper.onAuthenticationRequired {
                 // 注意：这里不能直接使用 async/await，因为 C 回调是同步的

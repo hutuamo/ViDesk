@@ -264,30 +264,6 @@ static DWORD viDesk_VerifyChangedCertificateEx(freerdp* instance, const char* ho
 
 // 扩展认证回调（优先使用，支持 NLA）
 static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** password, char** domain, rdp_auth_reason reason) {
-    // #region agent log
-    const char* logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log";
-    FILE* logFile = fopen(logPath, "a");
-    const char* reasonStr = "UNKNOWN";
-    switch (reason) {
-        case AUTH_NLA: reasonStr = "NLA"; break;
-        case AUTH_TLS: reasonStr = "TLS"; break;
-        case AUTH_RDP: reasonStr = "RDP"; break;
-        case AUTH_SMARTCARD_PIN: reasonStr = "SMARTCARD_PIN"; break;
-        case GW_AUTH_HTTP: reasonStr = "GW_HTTP"; break;
-        case GW_AUTH_RDG: reasonStr = "GW_RDG"; break;
-        case GW_AUTH_RPC: reasonStr = "GW_RPC"; break;
-        default: break;
-    }
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:262\",\"message\":\"AuthenticateEx回调被调用\",\"data\":{\"reason\":\"%s\",\"username\":\"%s\",\"domain\":\"%s\",\"passwordIsNull\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                "auth_ex_callback", (long long)(time(NULL) * 1000),
-                reasonStr,
-                username && *username ? *username : "(空)",
-                domain && *domain ? *domain : "(空)",
-                password == NULL || *password == NULL ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
@@ -304,21 +280,7 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
     if (settings) {
         settingsUsername = freerdp_settings_get_string(settings, FreeRDP_Username);
         settingsPassword = freerdp_settings_get_string(settings, FreeRDP_Password);
-        settingsDomain = freerdp_settings_get_string(settings, FreeRDP_Domain);
-        
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:295\",\"message\":\"从settings读取凭证\",\"data\":{\"username\":\"%s\",\"passwordLength\":%d,\"passwordIsNull\":%d,\"domain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_ex_settings", (long long)(time(NULL) * 1000),
-                    settingsUsername ? settingsUsername : "(空)",
-                    settingsPassword ? (int)strlen(settingsPassword) : 0,
-                    settingsPassword == NULL ? 1 : 0,
-                    settingsDomain ? settingsDomain : "(空)");
-            fclose(logFile);
-        }
-        // #endregion
-        
+        settingsDomain = freerdp_settings_get_string(settings, FreeRDP_Domain);        
         printf("[ViDesk] Settings中的用户名: %s\n", settingsUsername ? settingsUsername : "(空)");
         printf("[ViDesk] Settings中的密码长度: %d\n", settingsPassword ? (int)strlen(settingsPassword) : 0);
         printf("[ViDesk] Settings中的域: %s\n", settingsDomain ? settingsDomain : "(空)");
@@ -358,64 +320,16 @@ static BOOL viDesk_AuthenticateEx(freerdp* instance, char** username, char** pas
             if (*domain) {
                 printf("[ViDesk] 更新域指针: %s\n", *domain);
             }
-        }
-        
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:340\",\"message\":\"从settings更新凭证指针\",\"data\":{\"usernameUpdated\":%d,\"passwordUpdated\":%d,\"domainUpdated\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_ex_update", (long long)(time(NULL) * 1000),
-                    (settingsUsername && username && *username) ? 1 : 0,
-                    (settingsPassword && password && *password) ? 1 : 0,
-                    (settingsDomain && domain && *domain) ? 1 : 0);
-            fclose(logFile);
-        }
-        // #endregion
-    }
-    
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:355\",\"message\":\"AuthenticateEx回调返回\",\"data\":{\"result\":%d,\"finalUsername\":\"%s\",\"finalPasswordIsNull\":%d,\"finalDomain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                "auth_ex_result", (long long)(time(NULL) * 1000),
-                result ? 1 : 0,
-                username && *username ? *username : "(空)",
-                password == NULL || *password == NULL ? 1 : 0,
-                domain && *domain ? *domain : "(空)");
-        fclose(logFile);
-    }
-    // #endregion
-    
+        }    }    
     // 验证凭证是否有效
     if (result && (!username || !*username || !password || !*password)) {
-        printf("[ViDesk] 警告: AuthenticateEx 回调返回 TRUE，但凭证为空\n");
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:370\",\"message\":\"警告：凭证为空\",\"data\":{},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_ex_warning", (long long)(time(NULL) * 1000));
-            fclose(logFile);
-        }
-        // #endregion
-    }
+        printf("[ViDesk] 警告: AuthenticateEx 回调返回 TRUE，但凭证为空\n");    }
     
     return result;
 }
 
 // 认证回调（向后兼容）
 static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** password, char** domain) {
-    // #region agent log
-    const char* logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log";
-    FILE* logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:261\",\"message\":\"认证回调被调用\",\"data\":{\"username\":\"%s\",\"domain\":\"%s\",\"passwordIsNull\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                "auth_callback", (long long)(time(NULL) * 1000),
-                username && *username ? *username : "(空)",
-                domain && *domain ? *domain : "(空)",
-                password == NULL || *password == NULL ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
     ViDeskClientContext* viCtx = (ViDeskClientContext*)instance->context;
     ViDeskContext* ctx = viCtx ? viCtx->viDeskCtx : NULL;
 
@@ -432,21 +346,7 @@ static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** passw
     if (settings) {
         settingsUsername = freerdp_settings_get_string(settings, FreeRDP_Username);
         settingsPassword = freerdp_settings_get_string(settings, FreeRDP_Password);
-        settingsDomain = freerdp_settings_get_string(settings, FreeRDP_Domain);
-        
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:280\",\"message\":\"从settings读取凭证\",\"data\":{\"username\":\"%s\",\"passwordLength\":%d,\"passwordIsNull\":%d,\"domain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_settings", (long long)(time(NULL) * 1000),
-                    settingsUsername ? settingsUsername : "(空)",
-                    settingsPassword ? (int)strlen(settingsPassword) : 0,
-                    settingsPassword == NULL ? 1 : 0,
-                    settingsDomain ? settingsDomain : "(空)");
-            fclose(logFile);
-        }
-        // #endregion
-    }
+        settingsDomain = freerdp_settings_get_string(settings, FreeRDP_Domain);    }
 
     // 调用 Swift 回调（如果设置了）
     BOOL result = TRUE;
@@ -477,46 +377,10 @@ static BOOL viDesk_Authenticate(freerdp* instance, char** username, char** passw
                 free(*domain);
             }
             *domain = settingsDomain ? _strdup(settingsDomain) : NULL;
-        }
-        
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:320\",\"message\":\"从settings更新凭证指针\",\"data\":{\"usernameUpdated\":%d,\"passwordUpdated\":%d,\"domainUpdated\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_update", (long long)(time(NULL) * 1000),
-                    (settingsUsername && username && *username) ? 1 : 0,
-                    (settingsPassword && password && *password) ? 1 : 0,
-                    (settingsDomain && domain && *domain) ? 1 : 0);
-            fclose(logFile);
-        }
-        // #endregion
-    }
-    
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:330\",\"message\":\"认证回调返回\",\"data\":{\"result\":%d,\"finalUsername\":\"%s\",\"finalPasswordIsNull\":%d,\"finalDomain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                "auth_result", (long long)(time(NULL) * 1000),
-                result ? 1 : 0,
-                username && *username ? *username : "(空)",
-                password == NULL || *password == NULL ? 1 : 0,
-                domain && *domain ? *domain : "(空)");
-        fclose(logFile);
-    }
-    // #endregion
-    
+        }    }    
     // 验证凭证是否有效
     if (result && (!username || !*username || !password || !*password)) {
-        printf("[ViDesk] 警告: 认证回调返回 TRUE，但凭证为空\n");
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:340\",\"message\":\"警告：凭证为空\",\"data\":{},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\"}\n",
-                    "auth_warning", (long long)(time(NULL) * 1000));
-            fclose(logFile);
-        }
-        // #endregion
-    }
+        printf("[ViDesk] 警告: 认证回调返回 TRUE，但凭证为空\n");    }
     
     return result;
 }
@@ -622,19 +486,6 @@ bool viDesk_setServer(ViDeskContext* ctx, const char* hostname, int port) {
 }
 
 bool viDesk_setCredentials(ViDeskContext* ctx, const char* username, const char* password, const char* domain) {
-    // #region agent log
-    const char* logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log";
-    FILE* logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:376\",\"message\":\"viDesk_setCredentials调用\",\"data\":{\"username\":\"%s\",\"passwordLength\":%d,\"passwordIsNull\":%d,\"domain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                "set_creds", (long long)(time(NULL) * 1000),
-                username ? username : "(空)",
-                password ? (int)strlen(password) : 0,
-                password == NULL ? 1 : 0,
-                domain ? domain : "(空)");
-        fclose(logFile);
-    }
-    // #endregion
     if (!ctx || !ctx->rdpCtx) {
         setLastError("Invalid context");
         return false;
@@ -676,20 +527,6 @@ bool viDesk_setCredentials(ViDeskContext* ctx, const char* username, const char*
     if (domain) {
         domainSet = freerdp_settings_set_string(settings, FreeRDP_Domain, domain);
     }
-
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:400\",\"message\":\"viDesk_setCredentials结果\",\"data\":{\"usernameSet\":%d,\"passwordSet\":%d,\"domainSet\":%d,\"result\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                "set_creds_result", (long long)(time(NULL) * 1000),
-                usernameSet ? 1 : 0,
-                passwordSet ? 1 : 0,
-                domainSet ? 1 : 0,
-                (usernameSet && passwordSet && domainSet) ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
-
     if (!usernameSet || !passwordSet || !domainSet)
         return false;
 
@@ -750,18 +587,6 @@ bool viDesk_setPerformanceFlags(ViDeskContext* ctx, bool enableWallpaper, bool e
 }
 
 bool viDesk_setSecurity(ViDeskContext* ctx, bool useNLA, bool useTLS, bool ignoreCertErrors) {
-    // #region agent log
-    const char* logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log";
-    FILE* logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:455\",\"message\":\"viDesk_setSecurity调用\",\"data\":{\"useNLA\":%d,\"useTLS\":%d,\"ignoreCertErrors\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\"}\n",
-                "set_security", (long long)(time(NULL) * 1000),
-                useNLA ? 1 : 0,
-                useTLS ? 1 : 0,
-                ignoreCertErrors ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
     if (!ctx || !ctx->rdpCtx) {
         setLastError("Invalid context");
         return false;
@@ -805,22 +630,6 @@ bool viDesk_setSecurity(ViDeskContext* ctx, bool useNLA, bool useTLS, bool ignor
     // 对于非 Windows RDP 服务器（如 GNOME/xrdp），可能需要特殊配置
     // 禁用一些 Windows 特有的功能
     freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE);
-
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        BOOL nla = freerdp_settings_get_bool(settings, FreeRDP_NlaSecurity);
-        BOOL tls = freerdp_settings_get_bool(settings, FreeRDP_TlsSecurity);
-        BOOL rdp = freerdp_settings_get_bool(settings, FreeRDP_RdpSecurity);
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:500\",\"message\":\"viDesk_setSecurity完成\",\"data\":{\"nlaEnabled\":%d,\"tlsEnabled\":%d,\"rdpEnabled\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\"}\n",
-                "set_security_done", (long long)(time(NULL) * 1000),
-                nla ? 1 : 0,
-                tls ? 1 : 0,
-                rdp ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
-
     return true;
 }
 
@@ -854,15 +663,6 @@ bool viDesk_setGateway(ViDeskContext* ctx, const char* hostname, int port,
 }
 
 bool viDesk_connect(ViDeskContext* ctx) {
-    // #region agent log
-    const char* logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log";
-    FILE* logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:532\",\"message\":\"viDesk_connect开始\",\"data\":{},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                "connect_start", (long long)(time(NULL) * 1000));
-        fclose(logFile);
-    }
-    // #endregion
     if (!ctx || !ctx->rdpCtx) {
         setLastError("Invalid context");
         return false;
@@ -885,39 +685,14 @@ bool viDesk_connect(ViDeskContext* ctx) {
         printf("[ViDesk] 正在连接: %s:%u (用户: %s)\n",
                hostname ? hostname : "N/A",
                port,
-               username ? username : "N/A");
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:550\",\"message\":\"连接前凭证检查\",\"data\":{\"hostname\":\"%s\",\"port\":%u,\"username\":\"%s\",\"passwordLength\":%d,\"passwordIsNull\":%d,\"domain\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                    "connect_creds", (long long)(time(NULL) * 1000),
-                    hostname ? hostname : "N/A",
-                    port,
-                    username ? username : "N/A",
-                    password ? (int)strlen(password) : 0,
-                    password == NULL ? 1 : 0,
-                    domain ? domain : "(空)");
-            fclose(logFile);
-        }
-        // #endregion
-    }
+               username ? username : "N/A");    }
 
     // 通知状态变化
     notifyStateChange(ctx, 1, "Connecting...");  // 1 = connecting
 
     // 执行连接
     printf("[ViDesk] 调用 freerdp_connect()...\n");
-    BOOL connectResult = freerdp_connect(instance);
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:561\",\"message\":\"freerdp_connect返回\",\"data\":{\"result\":%d},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                "connect_result", (long long)(time(NULL) * 1000),
-                connectResult ? 1 : 0);
-        fclose(logFile);
-    }
-    // #endregion
-    if (!connectResult) {
+    BOOL connectResult = freerdp_connect(instance);    if (!connectResult) {
         UINT32 error = freerdp_get_last_error(ctx->rdpCtx);
         const char* errorStr = freerdp_get_last_error_string(error);
         const char* errorName = freerdp_get_last_error_name(error);
@@ -953,35 +728,12 @@ bool viDesk_connect(ViDeskContext* ctx) {
                 }
                 printf("[ViDesk] =========================================\n");
             }
-        }
-        
-        // #region agent log
-        logFile = fopen(logPath, "a");
-        if (logFile) {
-            fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:760\",\"message\":\"连接失败\",\"data\":{\"errorCode\":\"0x%08X\",\"errorName\":\"%s\",\"errorStr\":\"%s\",\"errorCategory\":\"%s\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                    "connect_failed", (long long)(time(NULL) * 1000),
-                    error,
-                    errorName ? errorName : "UNKNOWN",
-                    errorStr ? errorStr : "Connection failed",
-                    errorCategory ? errorCategory : "UNKNOWN");
-            fclose(logFile);
-        }
-        // #endregion
-        setLastError(errorMsg);
+        }        setLastError(errorMsg);
         notifyStateChange(ctx, 5, errorMsg);  // 5 = error
         return false;
     }
 
-    printf("[ViDesk] 连接成功!\n");
-    // #region agent log
-    logFile = fopen(logPath, "a");
-    if (logFile) {
-        fprintf(logFile, "{\"id\":\"log_%s\",\"timestamp\":%lld,\"location\":\"FreeRDPBridge.c:578\",\"message\":\"连接成功\",\"data\":{},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\"}\n",
-                "connect_success", (long long)(time(NULL) * 1000));
-        fclose(logFile);
-    }
-    // #endregion
-    return true;
+    printf("[ViDesk] 连接成功!\n");    return true;
 }
 
 void viDesk_disconnect(ViDeskContext* ctx) {

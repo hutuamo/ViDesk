@@ -155,40 +155,9 @@ final class ConnectionManagerViewModel {
     // MARK: - 连接操作
 
     /// 获取连接密码
-    func getPassword(for config: ConnectionConfig) -> String? {
-        // #region agent log
-        let logPath = "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log"
-        // #endregion
-        do {
-            let password = try keychainService.getPassword(for: config.id)
-            // #region agent log
-            let logEntry = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"ConnectionManagerViewModel.swift:158","message":"Keychain获取密码","data":{"connectionId":"\(config.id.uuidString)","passwordIsNil":\(password == nil),"passwordLength":\(password?.count ?? 0)},"sessionId":"debug-session","runId":"run1","hypothesisId":"D"}
-"""
-            if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry.data(using: .utf8) ?? Data())
-            } else {
-                try? FileManager.default.createDirectory(atPath: "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor", withIntermediateDirectories: true, attributes: nil)
-                try? logEntry.write(toFile: logPath, atomically: true, encoding: .utf8)
-            }
-            // #endregion
-            return password
-        } catch {
-            // #region agent log
-            let logEntry2 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"ConnectionManagerViewModel.swift:162","message":"Keychain获取密码失败","data":{"connectionId":"\(config.id.uuidString)","error":"\(error.localizedDescription.replacingOccurrences(of: "\"", with: "\\\""))"},"sessionId":"debug-session","runId":"run1","hypothesisId":"D"}
-"""
-            if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry2.data(using: .utf8) ?? Data())
-            } else {
-                try? logEntry2.write(toFile: logPath, atomically: true, encoding: .utf8)
-            }
-            // #endregion
-            return nil
+    func getPassword(for config: ConnectionConfig) -> String? {        do {
+            let password = try keychainService.getPassword(for: config.id)            return password
+        } catch {            return nil
         }
     }
 

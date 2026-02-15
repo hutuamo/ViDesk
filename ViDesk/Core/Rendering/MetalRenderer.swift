@@ -154,7 +154,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         guard width != textureWidth || height != textureHeight else { return }
 
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba8Unorm,
+            pixelFormat: .bgra8Unorm,
             width: width,
             height: height,
             mipmapped: false

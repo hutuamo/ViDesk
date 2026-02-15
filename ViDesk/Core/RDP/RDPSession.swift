@@ -175,28 +175,6 @@ final class RDPSession {
     }
 
     private func performConnect(password: String?) async throws {
-        // #region agent log
-        let logPath: String = {
-            if let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                return documentsPath.appendingPathComponent("debug.log").path
-            }
-            return "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor/debug.log"
-        }()
-        print("[ViDesk] performConnect 开始 - 密码: \(password == nil ? "nil" : (password!.isEmpty ? "空字符串" : "有值(长度:\(password!.count))"))")
-        let logEntry = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:172","message":"performConnect开始","data":{"passwordIsNil":\(password == nil),"passwordLength":\(password?.count ?? 0),"passwordIsEmpty":\(password?.isEmpty ?? true),"username":"\(config?.username ?? "")"},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-        if FileManager.default.fileExists(atPath: logPath) {
-            if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry.data(using: .utf8) ?? Data())
-            }
-        } else {
-            try? FileManager.default.createDirectory(atPath: "/Users/xhl/study/ai/studio/rdpclient/ViDesk/.cursor", withIntermediateDirectories: true, attributes: nil)
-            try? logEntry.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
         state = .connecting
 
         guard context.create() else {
@@ -215,49 +193,12 @@ final class RDPSession {
         }
 
         if !config.username.isEmpty {
-            // #region agent log
             let finalPassword = password ?? ""
-            print("[ViDesk] 准备设置凭证 - 用户名: \(config.username), 密码长度: \(finalPassword.count), 域: \(config.domain ?? "(空)")")
-            let logEntry2 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:191","message":"设置凭证前","data":{"username":"\(config.username)","passwordLength":\(finalPassword.count),"domain":"\(config.domain ?? "")","passwordIsEmpty":\(finalPassword.isEmpty)},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-            if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry2.data(using: .utf8) ?? Data())
-            } else {
-                try? logEntry2.write(toFile: logPath, atomically: true, encoding: .utf8)
-            }
-            // #endregion
             guard context.setCredentials(username: config.username,
                                          password: finalPassword,
                                          domain: config.domain) else {
-                // #region agent log
-                let logEntry3 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:194","message":"setCredentials失败","data":{"username":"\(config.username)"},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-                if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                    defer { try? fileHandle.close() }
-                    try? fileHandle.seekToEnd()
-                    try? fileHandle.write(contentsOf: logEntry3.data(using: .utf8) ?? Data())
-                } else {
-                    try? logEntry3.write(toFile: logPath, atomically: true, encoding: .utf8)
-                }
-                // #endregion
                 throw RDPError.connectionFailed("无法设置凭证")
             }
-            // #region agent log
-            let logEntry4 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:196","message":"setCredentials成功","data":{"username":"\(config.username)"},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-            if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                defer { try? fileHandle.close() }
-                try? fileHandle.seekToEnd()
-                try? fileHandle.write(contentsOf: logEntry4.data(using: .utf8) ?? Data())
-            } else {
-                try? logEntry4.write(toFile: logPath, atomically: true, encoding: .utf8)
-            }
-            // #endregion
         }
 
         let displaySettings = config.displaySettings
@@ -272,19 +213,6 @@ final class RDPSession {
                                   ignoreCertErrors: config.ignoreCertificateErrors) else {
             throw RDPError.connectionFailed("无法设置安全选项")
         }
-        // #region agent log
-        let logEntry5 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:205","message":"安全选项设置","data":{"useNLA":\(config.useNLA),"useTLS":\(config.useTLS),"ignoreCertErrors":\(config.ignoreCertificateErrors)},"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-"""
-        if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            defer { try? fileHandle.close() }
-            try? fileHandle.seekToEnd()
-            try? fileHandle.write(contentsOf: logEntry5.data(using: .utf8) ?? Data())
-        } else {
-            try? logEntry5.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
-
         // 设置网关 (如果有)
         if let gateway = config.gatewayHostname, !gateway.isEmpty {
             _ = context.setGateway(hostname: gateway)
@@ -292,38 +220,13 @@ final class RDPSession {
 
         // 执行连接
         state = .authenticating
-        // #region agent log
-        let logEntry6 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:219","message":"开始连接","data":{},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-        if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            defer { try? fileHandle.close() }
-            try? fileHandle.seekToEnd()
-            try? fileHandle.write(contentsOf: logEntry6.data(using: .utf8) ?? Data())
-        } else {
-            try? logEntry6.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
-
         let connected = await context.connect()
-        // #region agent log
-        let logEntry7 = """
-{"id":"log_\(UUID().uuidString)","timestamp":\(Int(Date().timeIntervalSince1970 * 1000)),"location":"RDPSession.swift:220","message":"连接结果","data":{"connected":\(connected),"lastError":"\(context.lastError?.replacingOccurrences(of: "\"", with: "\\\"") ?? "")"},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
-"""
-        if FileManager.default.fileExists(atPath: logPath), let fileHandle = FileHandle(forWritingAtPath: logPath) {
-            defer { try? fileHandle.close() }
-            try? fileHandle.seekToEnd()
-            try? fileHandle.write(contentsOf: logEntry7.data(using: .utf8) ?? Data())
-        } else {
-            try? logEntry7.write(toFile: logPath, atomically: true, encoding: .utf8)
-        }
-        // #endregion
         if connected {
-            state = .connected
             connectionStartTime = Date()
             initializeFrameBuffer()
             startEventLoop()
             startStatisticsTimer()
+            state = .connected
         } else {
             let errorMessage = context.lastError ?? "未知错误"
             state = .error(.connectionFailed(errorMessage))
@@ -388,18 +291,14 @@ final class RDPSession {
     }
 
     private func startEventLoop() {
-        eventLoopTask = Task.detached(priority: .high) { [weak self] in
+        let rawCtx = context.rawContextPointer
+        eventLoopTask = Task.detached(priority: .high) {
             while !Task.isCancelled {
-                guard let self = self else { break }
-
-                let success = await MainActor.run {
-                    self.context.processEvents(timeout: 16)
-                }
-
+                guard let rawCtx = rawCtx else { break }
+                let success = viDesk_processEvents(rawCtx, 16)
                 if !success {
                     break
                 }
-
                 try? await Task.sleep(for: .milliseconds(1))
             }
         }
